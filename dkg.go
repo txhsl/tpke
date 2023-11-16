@@ -1,6 +1,7 @@
 package tpke
 
 import (
+	"errors"
 	"math/rand"
 	"time"
 
@@ -50,15 +51,151 @@ func (dkg *DKG) Verify() bool {
 	return flag
 }
 
-func (dkg *DKG) PublishPubKey() *PublicKey {
+func (dkg *DKG) PublishPubKey() *bls.G1Projective {
 	// Compute public key S=sum(A_oi)
 	pubkey := dkg.participants[0].GetAZero()
 	for i := 1; i < dkg.size; i++ {
 		pubkey.Add(dkg.participants[i].GetAZero())
 	}
-	return &PublicKey{
-		G1: pubkey,
+	return pubkey
+}
+
+func (dkg *DKG) GenerateDecryptionShares(bigR *bls.G1Projective, amount int) (map[int]*bls.G1Projective, error) {
+	if amount > dkg.size {
+		return nil, errors.New("Not enough member")
 	}
+
+	shares := make(map[int]*bls.G1Projective)
+	for i := 0; i < amount; i++ {
+		shares[i] = bls.G1ProjectiveZero
+		for j := 0; j < dkg.size; j++ {
+			shares[i] = shares[i].Add(bigR.MulFR(dkg.participants[j].pvss.f[i].ToRepr()))
+		}
+	}
+	return shares, nil
+}
+
+func (dkg *DKG) Decrypt(cipherText *bls.G1Projective, inputs map[int]*bls.G1Projective) (*bls.G1Projective, error) {
+	if len(inputs) < dkg.threshold {
+		return nil, errors.New("Not enough share")
+	}
+
+	matrix := make([][]int, dkg.threshold) // size=threshold*threshold
+	i := 0
+	for index, _ := range inputs {
+		row := make([]int, dkg.threshold)
+		for j := 0; j < dkg.threshold; j++ {
+			row[j] = index ^ j
+		}
+		matrix[i] = row
+		i++
+		if i >= dkg.threshold {
+			break
+		}
+	}
+
+	matrixG1 := make([]*bls.G1Projective, dkg.threshold) // size=threshold
+	i = 0
+	for _, v := range inputs {
+		matrixG1[i] = v
+		i++
+		if i >= dkg.threshold {
+			break
+		}
+	}
+
+	d, coeff := Feldman(matrix)
+	dec := bls.G1ProjectiveZero
+	minusOne := bls.FRReprToFR(bls.NewFRRepr(0))
+	minusOne.SubAssign(bls.FRReprToFR(bls.NewFRRepr(1)))
+	// Compute -d1
+	for i := 0; i < len(matrixG1); i++ {
+		if coeff[i] > 0 {
+			dec = dec.Add(matrixG1[i].MulFR(bls.NewFRRepr(uint64(coeff[i]))).MulFR(minusOne.ToRepr()))
+		} else if coeff[i] < 0 {
+			dec = dec.Add(matrixG1[i].MulFR(bls.NewFRRepr(uint64(-coeff[i]))))
+		}
+	}
+	if d > 0 {
+		dec = dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(d))).Inverse().ToRepr())
+	} else {
+		dec = dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(-d))).Inverse().ToRepr()).MulFR(minusOne.ToRepr())
+	}
+
+	secret := cipherText.Add(dec)
+	return secret, nil
+}
+
+func Feldman(matrix [][]int) (int, []int) {
+	// Compute D, D1
+	return Determinant(matrix, len(matrix))
+}
+
+func Determinant(matrix [][]int, order int) (int, []int) {
+	value := 0
+	coeff := make([]int, order)
+	sign := 1
+	if order == 1 {
+		value = matrix[0][0]
+		coeff[0] = 1
+	} else {
+		for i := 0; i < order; i++ {
+			cofactor := Laplace(matrix, i, 0, order)
+			value += sign * matrix[i][0] * cofactor
+			coeff[i] = cofactor
+			sign *= -1
+		}
+	}
+	return value, coeff
+}
+
+// func DeterminantWithG1(matrix [][]int, shares []*bls.G1Projective) *bls.G1Projective {
+// 	order := len(shares)
+// 	result := bls.G1ProjectiveZero
+// 	minusone := bls.FRReprToFR(bls.NewFRRepr(0))
+// 	minusone.SubAssign(bls.FRReprToFR(bls.NewFRRepr(1)))
+// 	if order == 1 {
+// 		result = shares[0]
+// 	} else {
+// 		for i := 0; i < order; i++ {
+// 			cofactor := Laplace(matrix, i, 0, order)
+// 			if i%2 == 0 {
+// 				result = result.Add(shares[i].MulFR(bls.NewFRRepr(uint64(cofactor))))
+// 			} else {
+// 				result = result.Add(shares[i].MulFR(bls.NewFRRepr(uint64(cofactor))).MulFR(minusone.ToRepr()))
+// 			}
+// 		}
+// 	}
+// 	return result
+// }
+
+func Laplace(matrix [][]int, r int, c int, order int) int {
+	result := 0
+	cofactor := make([][]int, order)
+	for i := 0; i < order; i++ {
+		cofactor[i] = make([]int, order)
+	}
+	for i := 0; i < order; i++ {
+		for j := 0; j < order; j++ {
+			tmpi := i
+			tmpj := j
+			if i != r && j != c {
+				if i > r {
+					i--
+				}
+				if j > c {
+					j--
+				}
+				cofactor[i][j] = matrix[tmpi][tmpj]
+				i = tmpi
+				j = tmpj
+			}
+		}
+	}
+	if order >= 2 {
+		result, _ = Determinant(cofactor, order-1)
+	}
+	return result
 }
 
 func NewParticipant(secret *SecretKeySet) *Participant {
