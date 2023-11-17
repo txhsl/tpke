@@ -17,7 +17,7 @@ func TestDKG(t *testing.T) {
 	pk := dkg.PublishPubKey()
 
 	// Encrypt
-	r := bls.NewFRRepr(uint64(1024))
+	r := bls.NewFRRepr(uint64(1))
 	bigR := bls.G1ProjectiveOne.MulFR(r)
 	msg, _ := bls.RandG1(rand.Reader)
 	cipherText := msg.Add(pk.MulFR(r))
@@ -32,10 +32,8 @@ func TestDKG(t *testing.T) {
 	minusOne.SubAssign(bls.FRReprToFR(bls.NewFRRepr(1)))
 
 	// Decrypt
-	// fmt.Printf("rpk: %v", pk.MulFR(r))
+	fmt.Printf("rpk: %v\n", pk.MulFR(r))
 	fmt.Printf("msg: %v\n", msg)
-	expect := cipherText.Add(shares[2]).Add(shares[1].MulFR(bls.NewFRRepr(2)).MulFR(minusOne.ToRepr()))
-	fmt.Printf("expected: %v\n", expect)
 	result, _ := Decrypt(cipherText, 2, shares)
 	fmt.Printf("result: %v\n", result)
 	if !msg.Equal(result) {

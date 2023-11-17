@@ -2,6 +2,7 @@ package tpke
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -118,7 +119,9 @@ func Decrypt(cipherText *bls.G1Projective, threshold int, inputs map[int]*bls.G1
 	// Compute M=C-d1/d
 	for i := 0; i < len(matrixG1); i++ {
 		if coeff[i] > 0 {
-			dec = dec.Add(matrixG1[i].MulFR(bls.NewFRRepr(uint64(coeff[i]))).MulFR(minusOne.ToRepr()))
+			minor := matrixG1[i].MulFR(bls.NewFRRepr(uint64(coeff[i]))).ToAffine()
+			minor.NegAssign()
+			dec = dec.AddAffine(minor)
 		} else if coeff[i] < 0 {
 			dec = dec.Add(matrixG1[i].MulFR(bls.NewFRRepr(uint64(-coeff[i]))))
 		}
@@ -126,9 +129,11 @@ func Decrypt(cipherText *bls.G1Projective, threshold int, inputs map[int]*bls.G1
 	if d > 0 {
 		dec = dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(d))).Inverse().ToRepr())
 	} else {
-		dec = dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(-d))).Inverse().ToRepr()).MulFR(minusOne.ToRepr())
+		tmp := dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(-d))).Inverse().ToRepr()).ToAffine()
+		tmp.NegAssign()
+		dec = tmp.ToProjective()
 	}
-
+	fmt.Printf("-d1/d: %v\n", dec)
 	secret := cipherText.Add(dec)
 	return secret, nil
 }
