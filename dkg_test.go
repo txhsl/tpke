@@ -33,11 +33,11 @@ func TestDKG(t *testing.T) {
 
 	// Decrypt
 	// fmt.Printf("rpk: %v", pk.MulFR(r))
+	fmt.Printf("msg: %v\n", msg)
 	expect := cipherText.Add(shares[2]).Add(shares[1].MulFR(bls.NewFRRepr(2)).MulFR(minusOne.ToRepr()))
-	fmt.Printf("expected: %v", expect)
+	fmt.Printf("expected: %v\n", expect)
 	result, _ := Decrypt(cipherText, 2, shares)
-	fmt.Printf("msg: %v", msg)
-	fmt.Printf("result: %v", result)
+	fmt.Printf("result: %v\n", result)
 	if !msg.Equal(result) {
 		t.Fatalf("decrypt failed.")
 	}
