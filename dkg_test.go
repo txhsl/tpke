@@ -14,15 +14,22 @@ func TestDKG(t *testing.T) {
 		t.Fatalf("test failed.")
 	}
 	pk := dkg.PublishPubKey()
-	t.Logf("pks: %v", pk.ToAffine().SerializeBytes())
+	t.Logf("pks: %v", pk)
 
-	r := 1024
-	bigR := bls.G1ProjectiveOne.MulFR(bls.NewFRRepr(uint64(r)))
+	// Encrypt
+	r := bls.NewFRRepr(uint64(1024))
+	bigR := bls.G1ProjectiveOne.MulFR(r)
 	msg, _ := bls.RandG1(rand.Reader)
-	cipherText := msg.Add(pk.MulFR(bls.NewFRRepr(uint64(r))))
+	cipherText := msg.Add(pk.MulFR(r))
 
+	// Generate shares
 	shares, _ := dkg.GenerateDecryptionShares(bigR, 5)
-	result, _ := dkg.Decrypt(cipherText, shares)
+	if !dkg.VerifyDecryptionShares(r, shares) {
+		t.Fatalf("test failed.")
+	}
+
+	// Decrypt
+	result, _ := Decrypt(cipherText, 5, shares)
 	if !msg.Equal(result) {
 		t.Fatalf("test failed.")
 	}

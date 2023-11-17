@@ -76,31 +76,45 @@ func (dkg *DKG) GenerateDecryptionShares(bigR *bls.G1Projective, amount int) (ma
 	return shares, nil
 }
 
-func (dkg *DKG) Decrypt(cipherText *bls.G1Projective, inputs map[int]*bls.G1Projective) (*bls.G1Projective, error) {
-	if len(inputs) < dkg.threshold {
+func (dkg *DKG) VerifyDecryptionShares(r *bls.FRRepr, shares map[int]*bls.G1Projective) bool {
+	result := true
+	for i, v := range shares {
+		verifier := bls.G1ProjectiveZero
+		for j := 0; j < dkg.size; j++ {
+			verifier = verifier.Add(dkg.participants[j].pvss.bigf[i-1].MulFR(r))
+		}
+		if !v.Equal(verifier) {
+			result = false
+		}
+	}
+	return result
+}
+
+func Decrypt(cipherText *bls.G1Projective, threshold int, inputs map[int]*bls.G1Projective) (*bls.G1Projective, error) {
+	if len(inputs) < threshold {
 		return nil, errors.New("Not enough share")
 	}
 
-	matrix := make([][]int, dkg.threshold) // size=threshold*threshold
+	matrix := make([][]int, threshold) // size=threshold*threshold
 	i := 0
 	for index, _ := range inputs {
-		row := make([]int, dkg.threshold)
-		for j := 0; j < dkg.threshold; j++ {
+		row := make([]int, threshold)
+		for j := 0; j < threshold; j++ {
 			row[j] = int(math.Pow(float64(index), float64(j)))
 		}
 		matrix[i] = row
 		i++
-		if i >= dkg.threshold {
+		if i >= threshold {
 			break
 		}
 	}
 
-	matrixG1 := make([]*bls.G1Projective, dkg.threshold) // size=threshold
+	matrixG1 := make([]*bls.G1Projective, threshold) // size=threshold
 	i = 0
 	for _, v := range inputs {
 		matrixG1[i] = v
 		i++
-		if i >= dkg.threshold {
+		if i >= threshold {
 			break
 		}
 	}
