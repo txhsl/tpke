@@ -2,6 +2,7 @@ package tpke
 
 import (
 	"errors"
+	"math"
 	"math/rand"
 	"time"
 
@@ -67,9 +68,9 @@ func (dkg *DKG) GenerateDecryptionShares(bigR *bls.G1Projective, amount int) (ma
 
 	shares := make(map[int]*bls.G1Projective)
 	for i := 0; i < amount; i++ {
-		shares[i] = bls.G1ProjectiveZero
+		shares[i+1] = bls.G1ProjectiveZero
 		for j := 0; j < dkg.size; j++ {
-			shares[i] = shares[i].Add(bigR.MulFR(dkg.participants[j].pvss.f[i].ToRepr()))
+			shares[i+1] = shares[i+1].Add(bigR.MulFR(dkg.participants[j].pvss.f[i].ToRepr()))
 		}
 	}
 	return shares, nil
@@ -85,7 +86,7 @@ func (dkg *DKG) Decrypt(cipherText *bls.G1Projective, inputs map[int]*bls.G1Proj
 	for index, _ := range inputs {
 		row := make([]int, dkg.threshold)
 		for j := 0; j < dkg.threshold; j++ {
-			row[j] = index ^ j
+			row[j] = int(math.Pow(float64(index), float64(j)))
 		}
 		matrix[i] = row
 		i++
@@ -142,7 +143,7 @@ func Determinant(matrix [][]int, order int) (int, []int) {
 		for i := 0; i < order; i++ {
 			cofactor := Laplace(matrix, i, 0, order)
 			value += sign * matrix[i][0] * cofactor
-			coeff[i] = cofactor
+			coeff[i] = sign * cofactor
 			sign *= -1
 		}
 	}
