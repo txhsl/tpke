@@ -3,7 +3,6 @@ package tpke
 import (
 	"crypto/rand"
 	"errors"
-	"fmt"
 
 	"github.com/phoreproject/bls"
 )
@@ -127,7 +126,6 @@ func (pks *PublicKeySet) Decrypt(ds map[int]*DecryptionShare, ct *CipherText) ([
 		i++
 	}
 	g, err := Interpolate(pks.commitment.degree(), samples)
-	fmt.Printf("g: %v\n", g)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +149,6 @@ func (pks *PublicKeySet) DecryptUsingStringMap(ds map[string]*DecryptionShare, c
 	}
 
 	g, err := Interpolate(pks.commitment.degree(), samples)
-	fmt.Printf("g: %v\n", g)
 	if err != nil {
 		return nil, err
 	}

@@ -2,19 +2,19 @@ package tpke
 
 import (
 	"crypto/rand"
+	"fmt"
 	"testing"
 
 	"github.com/phoreproject/bls"
 )
 
 func TestDKG(t *testing.T) {
-	dkg := NewDKG(7, 5)
+	dkg := NewDKG(3, 2)
 	dkg = dkg.Prepare()
 	if !dkg.Verify() {
-		t.Fatalf("test failed.")
+		t.Fatalf("invalid pvss.")
 	}
 	pk := dkg.PublishPubKey()
-	t.Logf("pks: %v", pk)
 
 	// Encrypt
 	r := bls.NewFRRepr(uint64(1024))
@@ -23,15 +23,23 @@ func TestDKG(t *testing.T) {
 	cipherText := msg.Add(pk.MulFR(r))
 
 	// Generate shares
-	shares, _ := dkg.GenerateDecryptionShares(bigR, 5)
+	shares, _ := dkg.GenerateDecryptionShares(bigR, 2)
 	if !dkg.VerifyDecryptionShares(r, shares) {
-		t.Fatalf("test failed.")
+		t.Fatalf("invalid shares.")
 	}
 
+	minusOne := bls.FRReprToFR(bls.NewFRRepr(0))
+	minusOne.SubAssign(bls.FRReprToFR(bls.NewFRRepr(1)))
+
 	// Decrypt
-	result, _ := Decrypt(cipherText, 5, shares)
+	// fmt.Printf("rpk: %v", pk.MulFR(r))
+	expect := cipherText.Add(shares[2]).Add(shares[1].MulFR(bls.NewFRRepr(2)).MulFR(minusOne.ToRepr()))
+	fmt.Printf("expected: %v", expect)
+	result, _ := Decrypt(cipherText, 2, shares)
+	fmt.Printf("msg: %v", msg)
+	fmt.Printf("result: %v", result)
 	if !msg.Equal(result) {
-		t.Fatalf("test failed.")
+		t.Fatalf("decrypt failed.")
 	}
 }
 
