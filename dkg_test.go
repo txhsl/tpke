@@ -2,7 +2,6 @@ package tpke
 
 import (
 	"crypto/rand"
-	"fmt"
 	"testing"
 
 	"github.com/phoreproject/bls"
@@ -28,14 +27,8 @@ func TestDKG(t *testing.T) {
 		t.Fatalf("invalid shares.")
 	}
 
-	minusOne := bls.FRReprToFR(bls.NewFRRepr(0))
-	minusOne.SubAssign(bls.FRReprToFR(bls.NewFRRepr(1)))
-
 	// Decrypt
-	fmt.Printf("rpk: %v\n", pk.MulFR(r))
-	fmt.Printf("msg: %v\n", msg)
 	result, _ := Decrypt(cipherText, 2, shares)
-	fmt.Printf("result: %v\n", result)
 	if !msg.Equal(result) {
 		t.Fatalf("decrypt failed.")
 	}

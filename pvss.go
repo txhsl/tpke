@@ -5,7 +5,6 @@ import "github.com/phoreproject/bls"
 type PVSS struct {
 	r1   *bls.G1Projective
 	r2   *bls.G2Projective
-	biga *Commitment
 	f    []*bls.FR
 	bigf []*bls.G1Projective
 }
@@ -24,13 +23,12 @@ func GeneratePVSS(r *bls.FRRepr, size int, secret *SecretKeySet) *PVSS {
 	return &PVSS{
 		r1:   bls.G1ProjectiveOne.MulFR(r),
 		r2:   bls.G2ProjectiveOne.MulFR(r),
-		biga: secret.poly.commitment(),
 		f:    f,
 		bigf: bigf,
 	}
 }
 
-func (pvss *PVSS) Verify() bool {
+func (pvss *PVSS) Verify(public *PublicKeySet) bool {
 	// Verify e(R1,G2)==e(G1,R2)
 	if !bls.Pairing(pvss.r1, bls.G2ProjectiveOne).Equals(bls.Pairing(bls.G1ProjectiveOne, pvss.r2)) {
 		return false
@@ -38,7 +36,7 @@ func (pvss *PVSS) Verify() bool {
 	for i := 0; i < len(pvss.f); i++ {
 		fr := bls.FRReprToFR(bls.NewFRRepr(uint64(i + 1)))
 		// Verify F(i)==sum(A_{t-1}*i^(t-1))
-		if !pvss.bigf[i].ToAffine().Equals(pvss.biga.evaluate(*fr).ToAffine()) {
+		if !pvss.bigf[i].Equal(public.commitment.evaluate(*fr)) {
 			return false
 		}
 		// Verify e(R1*f(i),G2)==e(F(i),R2)
@@ -47,8 +45,4 @@ func (pvss *PVSS) Verify() bool {
 		}
 	}
 	return true
-}
-
-func (pvss *PVSS) GetAZero() *bls.G1Projective {
-	return pvss.biga.coeff[0]
 }

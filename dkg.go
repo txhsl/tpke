@@ -2,7 +2,6 @@ package tpke
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"math/rand"
 	"time"
@@ -33,7 +32,7 @@ func NewDKG(size int, threshold int) *DKG {
 func (dkg *DKG) Prepare() *DKG {
 	for i := 0; i < dkg.size; i++ {
 		// Init random polynomial a
-		secret := RandomSecretKeySet(dkg.threshold)
+		secret := RandomSecretKeySet(dkg.threshold - 1)
 		// Compute A=a*G1
 		p := NewParticipant(secret)
 		// Compute PVSS
@@ -54,10 +53,10 @@ func (dkg *DKG) Verify() bool {
 }
 
 func (dkg *DKG) PublishPubKey() *bls.G1Projective {
-	// Compute public key S=sum(A_oi)
-	pubkey := dkg.participants[0].GetAZero()
-	for i := 1; i < dkg.size; i++ {
-		pubkey = pubkey.Add(dkg.participants[i].GetAZero())
+	// Compute public key S=sum(A0)
+	pubkey := bls.G1ProjectiveZero
+	for i := 0; i < dkg.size; i++ {
+		pubkey = pubkey.Add(dkg.participants[i].public.commitment.coeff[0])
 	}
 	return pubkey
 }
@@ -133,7 +132,7 @@ func Decrypt(cipherText *bls.G1Projective, threshold int, inputs map[int]*bls.G1
 		tmp.NegAssign()
 		dec = tmp.ToProjective()
 	}
-	fmt.Printf("-d1/d: %v\n", dec)
+
 	secret := cipherText.Add(dec)
 	return secret, nil
 }
@@ -160,26 +159,6 @@ func Determinant(matrix [][]int, order int) (int, []int) {
 	}
 	return value, coeff
 }
-
-// func DeterminantWithG1(matrix [][]int, shares []*bls.G1Projective) *bls.G1Projective {
-// 	order := len(shares)
-// 	result := bls.G1ProjectiveZero
-// 	minusone := bls.FRReprToFR(bls.NewFRRepr(0))
-// 	minusone.SubAssign(bls.FRReprToFR(bls.NewFRRepr(1)))
-// 	if order == 1 {
-// 		result = shares[0]
-// 	} else {
-// 		for i := 0; i < order; i++ {
-// 			cofactor := Laplace(matrix, i, 0, order)
-// 			if i%2 == 0 {
-// 				result = result.Add(shares[i].MulFR(bls.NewFRRepr(uint64(cofactor))))
-// 			} else {
-// 				result = result.Add(shares[i].MulFR(bls.NewFRRepr(uint64(cofactor))).MulFR(minusone.ToRepr()))
-// 			}
-// 		}
-// 	}
-// 	return result
-// }
 
 func Laplace(matrix [][]int, r int, c int, order int) int {
 	result := 0
@@ -228,9 +207,5 @@ func (p *Participant) GeneratePVSS(size int) {
 }
 
 func (p *Participant) VerifyPVSS() bool {
-	return p.pvss.Verify()
-}
-
-func (p *Participant) GetAZero() *bls.G1Projective {
-	return p.pvss.GetAZero()
+	return p.pvss.Verify(p.public)
 }
