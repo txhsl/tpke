@@ -8,7 +8,7 @@ import (
 )
 
 func TestDKG(t *testing.T) {
-	dkg := NewDKG(3, 2)
+	dkg := NewDKG(7, 5)
 	dkg = dkg.Prepare()
 	if !dkg.Verify() {
 		t.Fatalf("invalid pvss.")
@@ -22,13 +22,13 @@ func TestDKG(t *testing.T) {
 	cipherText := msg.Add(pk.MulFR(r))
 
 	// Generate shares
-	shares, _ := dkg.GenerateDecryptionShares(bigR, 2)
+	shares, _ := dkg.GenerateDecryptionShares(bigR, 5)
 	if !dkg.VerifyDecryptionShares(r, shares) {
 		t.Fatalf("invalid shares.")
 	}
 
 	// Decrypt
-	result, _ := Decrypt(cipherText, 2, shares)
+	result, _ := Decrypt(cipherText, 5, shares)
 	if !msg.Equal(result) {
 		t.Fatalf("decrypt failed.")
 	}

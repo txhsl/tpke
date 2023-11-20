@@ -9,7 +9,7 @@ type PVSS struct {
 	bigf []*bls.G1Projective
 }
 
-func GeneratePVSS(r *bls.FRRepr, size int, secret *SecretKeySet) *PVSS {
+func GeneratePVSS(r *bls.FRRepr, size int, secret *Secret) *PVSS {
 	f := make([]*bls.FR, size)
 	bigf := make([]*bls.G1Projective, size)
 	for i := 0; i < size; i++ {
@@ -28,7 +28,7 @@ func GeneratePVSS(r *bls.FRRepr, size int, secret *SecretKeySet) *PVSS {
 	}
 }
 
-func (pvss *PVSS) Verify(public *PublicKeySet) bool {
+func (pvss *PVSS) Verify(public *SecretCommitment) bool {
 	// Verify e(R1,G2)==e(G1,R2)
 	if !bls.Pairing(pvss.r1, bls.G2ProjectiveOne).Equals(bls.Pairing(bls.G1ProjectiveOne, pvss.r2)) {
 		return false

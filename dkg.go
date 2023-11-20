@@ -17,8 +17,8 @@ type DKG struct {
 }
 
 type Participant struct {
-	secret *SecretKeySet
-	public *PublicKeySet
+	secret *Secret
+	public *SecretCommitment
 	pvss   *PVSS // All PVSS in one, just for test, secret shares are not encrypted
 }
 
@@ -32,7 +32,7 @@ func NewDKG(size int, threshold int) *DKG {
 func (dkg *DKG) Prepare() *DKG {
 	for i := 0; i < dkg.size; i++ {
 		// Init random polynomial a
-		secret := RandomSecretKeySet(dkg.threshold - 1)
+		secret := RandomSecret(dkg.threshold)
 		// Compute A=a*G1
 		p := NewParticipant(secret)
 		// Compute PVSS
@@ -189,10 +189,10 @@ func Laplace(matrix [][]int, r int, c int, order int) int {
 	return result
 }
 
-func NewParticipant(secret *SecretKeySet) *Participant {
+func NewParticipant(secret *Secret) *Participant {
 	return &Participant{
 		secret: secret,
-		public: secret.PublicKeySet(),
+		public: secret.Commitment(),
 	}
 }
 
