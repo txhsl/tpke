@@ -19,16 +19,24 @@ func NewTPKEFromDKG(dkg *DKG) *TPKE {
 	}
 }
 
-func (tpke *TPKE) Encrypt(msg *bls.G1Projective) *CipherText {
-	return tpke.pubkey.Encrypt(msg)
+func (tpke *TPKE) Encrypt(msgs []*bls.G1Projective) []*CipherText {
+	results := make([]*CipherText, len(msgs))
+	for i := 0; i < len(msgs); i++ {
+		results[i] = tpke.pubkey.Encrypt(msgs[i])
+	}
+	return results
 }
 
-func (tpke *TPKE) DecryptShare(ct *CipherText, amount int) map[int]*DecryptionShare {
-	shares := make(map[int]*DecryptionShare)
+func (tpke *TPKE) DecryptShare(cts []*CipherText, amount int) map[int]([]*DecryptionShare) {
+	results := make(map[int]([]*DecryptionShare))
 	for i := 0; i < amount; i++ {
-		shares[i+1] = tpke.prvkeys[i+1].DecryptShare(ct)
+		shares := make([]*DecryptionShare, len(cts))
+		for j := 0; j < len(cts); j++ {
+			shares[j] = tpke.prvkeys[i+1].DecryptShare(cts[j])
+		}
+		results[i+1] = shares
 	}
-	return shares
+	return results
 }
 
 type CipherText struct {
@@ -40,13 +48,13 @@ type DecryptionShare struct {
 	g1 *bls.G1Projective
 }
 
-func Decrypt(cipherText *CipherText, threshold int, inputs map[int]*DecryptionShare) (*bls.G1Projective, error) {
+func Decrypt(cts []*CipherText, threshold int, inputs map[int]([]*DecryptionShare)) ([]*bls.G1Projective, error) {
 	if len(inputs) < threshold {
 		return nil, errors.New("not enough share")
 	}
 
-	matrix := make([][]int, threshold)               // size=threshold*threshold
-	matrixG1 := make([]*bls.G1Projective, threshold) // size=threshold
+	matrix := make([][]int, threshold)                // size=threshold*threshold
+	matrixG1 := make([][]*DecryptionShare, threshold) // size=threshold*len(cts)
 	i := 0
 	for index, v := range inputs {
 		row := make([]int, threshold)
@@ -54,7 +62,7 @@ func Decrypt(cipherText *CipherText, threshold int, inputs map[int]*DecryptionSh
 			row[j] = int(math.Pow(float64(index), float64(j)))
 		}
 		matrix[i] = row
-		matrixG1[i] = v.g1
+		matrixG1[i] = v
 		i++
 		if i >= threshold {
 			break
@@ -62,25 +70,29 @@ func Decrypt(cipherText *CipherText, threshold int, inputs map[int]*DecryptionSh
 	}
 
 	d, coeff := feldman(matrix)
-	dec := bls.G1ProjectiveZero
+	results := make([]*bls.G1Projective, len(cts))
 	// Compute M=C-d1/d
-	for i := 0; i < len(matrixG1); i++ {
-		if coeff[i] > 0 {
-			minor := matrixG1[i].MulFR(bls.NewFRRepr(uint64(coeff[i]))).ToAffine()
-			minor.NegAssign()
-			dec = dec.AddAffine(minor)
-		} else if coeff[i] < 0 {
-			dec = dec.Add(matrixG1[i].MulFR(bls.NewFRRepr(uint64(-coeff[i]))))
+	for i := 0; i < len(cts); i++ {
+		dec := bls.G1ProjectiveZero
+		for j := 0; j < threshold; j++ {
+			if coeff[j] > 0 {
+				minor := matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(coeff[j]))).ToAffine()
+				minor.NegAssign()
+				dec = dec.AddAffine(minor)
+			} else if coeff[j] < 0 {
+				dec = dec.Add(matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(-coeff[j]))))
+			}
 		}
-	}
-	if d > 0 {
-		dec = dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(d))).Inverse().ToRepr())
-	} else {
-		tmp := dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(-d))).Inverse().ToRepr()).ToAffine()
-		tmp.NegAssign()
-		dec = tmp.ToProjective()
+		if d > 0 {
+			dec = dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(d))).Inverse().ToRepr())
+		} else {
+			tmp := dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(-d))).Inverse().ToRepr()).ToAffine()
+			tmp.NegAssign()
+			dec = tmp.ToProjective()
+		}
+
+		results[i] = cts[i].g1.Add(dec)
 	}
 
-	secret := cipherText.g1.Add(dec)
-	return secret, nil
+	return results, nil
 }

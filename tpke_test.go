@@ -16,15 +16,20 @@ func TestTPKE(t *testing.T) {
 	tpke := NewTPKEFromDKG(dkg)
 
 	// Encrypt
-	msg, _ := bls.RandG1(rand.Reader)
-	cipherText := tpke.Encrypt(msg)
+	msgs := make([]*bls.G1Projective, 1000)
+	for i := 0; i < 1000; i++ {
+		msgs[i], _ = bls.RandG1(rand.Reader)
+	}
+	cipherTexts := tpke.Encrypt(msgs)
 
 	// Generate shares
-	shares := tpke.DecryptShare(cipherText, 5)
+	shares := tpke.DecryptShare(cipherTexts, 5)
 
 	// Decrypt
-	result, _ := Decrypt(cipherText, 5, shares)
-	if !msg.Equal(result) {
-		t.Fatalf("decrypt failed.")
+	results, _ := Decrypt(cipherTexts, 5, shares)
+	for i := 0; i < 1000; i++ {
+		if !msgs[i].Equal(results[i]) {
+			t.Fatalf("decrypt failed.")
+		}
 	}
 }
