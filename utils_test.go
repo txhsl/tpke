@@ -1,72 +1,40 @@
 package tpke
 
-import (
-	"crypto/rand"
-	"testing"
-
-	"github.com/phoreproject/bls"
-)
-
-func TestDKG(t *testing.T) {
-	dkg := NewDKG(7, 5)
-	dkg = dkg.Prepare()
-	if !dkg.Verify() {
-		t.Fatalf("invalid pvss.")
-	}
-	pk := dkg.PublishPubKey()
-
-	// Encrypt
-	r := bls.NewFRRepr(uint64(1))
-	bigR := bls.G1ProjectiveOne.MulFR(r)
-	msg, _ := bls.RandG1(rand.Reader)
-	cipherText := msg.Add(pk.MulFR(r))
-
-	// Generate shares
-	shares, _ := dkg.GenerateDecryptionShares(bigR, 5)
-	if !dkg.VerifyDecryptionShares(r, shares) {
-		t.Fatalf("invalid shares.")
-	}
-
-	// Decrypt
-	result, _ := Decrypt(cipherText, 5, shares)
-	if !msg.Equal(result) {
-		t.Fatalf("decrypt failed.")
-	}
-}
+import "testing"
 
 func TestDeterminant(t *testing.T) {
 	matrix := [][]int{{7, 8, 9, 4, 3}, {4, 9, 7, 0, 0}, {3, 6, 1, 0, 0}, {0, 5, 6, 0, 0}, {0, 6, 8, 0, 0}}
-	result, _ := Determinant(matrix, len(matrix))
+	result, _ := determinant(matrix, len(matrix))
 	if result != 0 {
 		t.Fatalf("test failed. %v", result)
 	}
 	matrix = [][]int{{6, 5, 4, 3, 2}, {4, 9, 7, 0, 0}, {3, 6, 1, 0, 0}, {0, 5, 6, 0, 0}, {0, 6, 8, 0, 0}}
-	result, _ = Determinant(matrix, len(matrix))
+	result, _ = determinant(matrix, len(matrix))
 	if result != 0 {
 		t.Fatalf("test failed. %v", result)
 	}
 	matrix = [][]int{{6, 5, 4, 3, 2}, {7, 8, 9, 4, 3}, {3, 6, 1, 0, 0}, {0, 5, 6, 0, 0}, {0, 6, 8, 0, 0}}
-	result, _ = Determinant(matrix, len(matrix))
+	result, _ = determinant(matrix, len(matrix))
 	if result != 12 {
 		t.Fatalf("test failed. %v", result)
 	}
 	matrix = [][]int{{6, 5, 4, 3, 2}, {7, 8, 9, 4, 3}, {4, 9, 7, 0, 0}, {0, 5, 6, 0, 0}, {0, 6, 8, 0, 0}}
-	result, _ = Determinant(matrix, len(matrix))
+	result, _ = determinant(matrix, len(matrix))
 	if result != 16 {
 		t.Fatalf("test failed. %v", result)
 	}
 	matrix = [][]int{{6, 5, 4, 3, 2}, {7, 8, 9, 4, 3}, {4, 9, 7, 0, 0}, {3, 6, 1, 0, 0}, {0, 6, 8, 0, 0}}
-	result, _ = Determinant(matrix, len(matrix))
+	result, _ = determinant(matrix, len(matrix))
 	if result != 78 {
 		t.Fatalf("test failed. %v", result)
 	}
 	matrix = [][]int{{6, 5, 4, 3, 2}, {7, 8, 9, 4, 3}, {4, 9, 7, 0, 0}, {3, 6, 1, 0, 0}, {0, 5, 6, 0, 0}}
-	result, _ = Determinant(matrix, len(matrix))
+	result, _ = determinant(matrix, len(matrix))
 	if result != 67 {
 		t.Fatalf("test failed. %v", result)
 	}
 	matrix = [][]int{{7, 6, 5, 4, 3, 2}, {9, 7, 8, 9, 4, 3}, {7, 4, 9, 7, 0, 0}, {5, 3, 6, 1, 0, 0}, {0, 0, 5, 6, 0, 0}, {0, 0, 6, 8, 0, 0}}
-	result, coeff := Determinant(matrix, len(matrix))
+	result, coeff := determinant(matrix, len(matrix))
 	if result != 4 {
 		t.Fatalf("test failed. %v", result)
 	}
