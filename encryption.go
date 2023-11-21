@@ -16,7 +16,10 @@ func AESEncrypt(g1 *bls.G1Projective, msg []byte) ([]byte, error) {
 	}
 	seed := g1.ToAffine().SerializeBytes()
 	hash := sha256.Sum256(seed[0:96])
-	block, _ := aes.NewCipher(hash[0:32])
+	block, err := aes.NewCipher(hash[0:32])
+	if err != nil {
+		return nil, err
+	}
 	blockSize := block.BlockSize()
 
 	data := pkcs7Padding(msg, blockSize)
@@ -33,13 +36,19 @@ func AESDecrypt(g1 *bls.G1Projective, cipherText []byte) ([]byte, error) {
 	}
 	seed := g1.ToAffine().SerializeBytes()
 	hash := sha256.Sum256(seed[0:96])
-	block, _ := aes.NewCipher(hash[0:32])
+	block, err := aes.NewCipher(hash[0:32])
+	if err != nil {
+		return nil, err
+	}
 	blockSize := block.BlockSize()
 
 	blockMode := cipher.NewCBCDecrypter(block, hash[:blockSize])
 	decrypted := make([]byte, len(cipherText))
 	blockMode.CryptBlocks(decrypted, cipherText)
-	result, _ := pkcs7UnPadding(decrypted)
+	result, err := pkcs7UnPadding(decrypted)
+	if err != nil {
+		return nil, err
+	}
 
 	return result, nil
 }
@@ -56,5 +65,8 @@ func pkcs7UnPadding(data []byte) ([]byte, error) {
 		return nil, errors.New("empty array")
 	}
 	unPadding := int(data[length-1])
+	if length-unPadding < 0 {
+		return nil, errors.New("unpadding failed")
+	}
 	return data[:(length - unPadding)], nil
 }
