@@ -8,12 +8,14 @@ import (
 )
 
 type TPKE struct {
+	size    int
 	prvkeys map[int]*PrivateKey
 	pubkey  *PublicKey
 }
 
 func NewTPKEFromDKG(dkg *DKG) *TPKE {
 	return &TPKE{
+		size:    dkg.size,
 		prvkeys: dkg.GetPrivateKeys(),
 		pubkey:  dkg.PublishPublicKey(),
 	}
@@ -27,9 +29,9 @@ func (tpke *TPKE) Encrypt(msgs []*bls.G1Projective) []*CipherText {
 	return results
 }
 
-func (tpke *TPKE) DecryptShare(cts []*CipherText, amount int) map[int]([]*DecryptionShare) {
+func (tpke *TPKE) DecryptShare(cts []*CipherText) map[int]([]*DecryptionShare) {
 	results := make(map[int]([]*DecryptionShare))
-	for i := 0; i < amount; i++ {
+	for i := 0; i < tpke.size; i++ {
 		shares := make([]*DecryptionShare, len(cts))
 		for j := 0; j < len(cts); j++ {
 			shares[j] = tpke.prvkeys[i+1].DecryptShare(cts[j])

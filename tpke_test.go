@@ -23,7 +23,7 @@ func TestTPKE(t *testing.T) {
 	cipherTexts := tpke.Encrypt(msgs)
 
 	// Generate shares
-	shares := tpke.DecryptShare(cipherTexts, 5)
+	shares := tpke.DecryptShare(cipherTexts)
 
 	// Decrypt
 	results, _ := Decrypt(cipherTexts, 5, shares)
