@@ -1,5 +1,10 @@
 package tpke
 
+import (
+	"bytes"
+	"errors"
+)
+
 func feldman(matrix [][]int) (int, []int) {
 	// Compute D, D1
 	return determinant(matrix, len(matrix))
@@ -50,4 +55,22 @@ func laplace(matrix [][]int, r int, c int, order int) int {
 		result, _ = determinant(cofactor, order-1)
 	}
 	return result
+}
+
+func pkcs7Padding(data []byte, blockSize int) []byte {
+	padding := blockSize - len(data)%blockSize
+	padText := bytes.Repeat([]byte{byte(padding)}, padding)
+	return append(data, padText...)
+}
+
+func pkcs7UnPadding(data []byte) ([]byte, error) {
+	length := len(data)
+	if length == 0 {
+		return nil, errors.New("empty array")
+	}
+	unPadding := int(data[length-1])
+	if length-unPadding < 0 {
+		return nil, errors.New("unpadding failed")
+	}
+	return data[:(length - unPadding)], nil
 }

@@ -1,7 +1,6 @@
 package tpke
 
 import (
-	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
@@ -51,22 +50,4 @@ func AESDecrypt(g1 *bls.G1Projective, cipherText []byte) ([]byte, error) {
 	}
 
 	return result, nil
-}
-
-func pkcs7Padding(data []byte, blockSize int) []byte {
-	padding := blockSize - len(data)%blockSize
-	padText := bytes.Repeat([]byte{byte(padding)}, padding)
-	return append(data, padText...)
-}
-
-func pkcs7UnPadding(data []byte) ([]byte, error) {
-	length := len(data)
-	if length == 0 {
-		return nil, errors.New("empty array")
-	}
-	unPadding := int(data[length-1])
-	if length-unPadding < 0 {
-		return nil, errors.New("unpadding failed")
-	}
-	return data[:(length - unPadding)], nil
 }

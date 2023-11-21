@@ -120,7 +120,3 @@ func (c *Commitment) AddAssign(op *Commitment) {
 		c.coeff[i].Add(op.coeff[i])
 	}
 }
-
-func (c *Commitment) MulAssign() {
-
-}
