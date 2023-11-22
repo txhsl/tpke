@@ -26,6 +26,6 @@ func TestTPKE(t *testing.T) {
 	// Decrypt
 	results, _ := Decrypt(cipherTexts, 5, shares)
 	if !msg[0].Equal(results[0]) {
-		t.Fatalf("decrypt failed.")
+		t.Fatalf("decryption failed.")
 	}
 }
