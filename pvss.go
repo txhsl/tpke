@@ -3,13 +3,15 @@ package tpke
 import "github.com/phoreproject/bls"
 
 type PVSS struct {
-	r1   *bls.G1Projective
-	r2   *bls.G2Projective
-	f    []*bls.FR
-	bigf []*bls.G1Projective
+	public *SecretCommitment
+	r1     *bls.G1Projective
+	r2     *bls.G2Projective
+	bigf   []*bls.G1Projective
 }
 
-func GeneratePVSS(r *bls.FRRepr, size int, secret *Secret) *PVSS {
+func GenerateSharedSecrets(r *bls.FRRepr, size int, secret *Secret) (*PVSS, []*bls.FR) {
+	r1 := bls.G1ProjectiveOne.MulFR(r)
+	r2 := bls.G2ProjectiveOne.MulFR(r)
 	f := make([]*bls.FR, size)
 	bigf := make([]*bls.G1Projective, size)
 	for i := 0; i < size; i++ {
@@ -21,28 +23,25 @@ func GeneratePVSS(r *bls.FRRepr, size int, secret *Secret) *PVSS {
 		bigf[i] = secret.poly.commitment().evaluate(*fr)
 	}
 	return &PVSS{
-		r1:   bls.G1ProjectiveOne.MulFR(r),
-		r2:   bls.G2ProjectiveOne.MulFR(r),
-		f:    f,
-		bigf: bigf,
-	}
+		public: secret.Commitment(),
+		r1:     r1,
+		r2:     r2,
+		bigf:   bigf,
+	}, f
 }
 
-func (pvss *PVSS) Verify(public *SecretCommitment) bool {
+func (pvss *PVSS) Verify() bool {
 	// Verify e(R1,G2)==e(G1,R2)
 	if !bls.Pairing(pvss.r1, bls.G2ProjectiveOne).Equals(bls.Pairing(bls.G1ProjectiveOne, pvss.r2)) {
 		return false
 	}
-	for i := 0; i < len(pvss.f); i++ {
+	for i := 0; i < len(pvss.bigf); i++ {
 		fr := bls.FRReprToFR(bls.NewFRRepr(uint64(i + 1)))
 		// Verify F(i)==sum(A_{t-1}*i^(t-1))
-		if !pvss.bigf[i].Equal(public.commitment.evaluate(*fr)) {
+		if !pvss.bigf[i].Equal(pvss.public.commitment.evaluate(*fr)) {
 			return false
 		}
-		// Verify e(R1*f(i),G2)==e(F(i),R2)
-		if !bls.Pairing(pvss.r1.MulFR(pvss.f[i].ToRepr()), bls.G2ProjectiveOne).Equals(bls.Pairing(pvss.bigf[i], pvss.r2)) {
-			return false
-		}
+
 	}
 	return true
 }
