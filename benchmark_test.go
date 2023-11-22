@@ -7,7 +7,7 @@ import (
 	"github.com/phoreproject/bls"
 )
 
-func TestTPKE(t *testing.T) {
+func TestBenchmark(t *testing.T) {
 	dkg := NewDKG(7, 5)
 	dkg = dkg.Prepare()
 	if !dkg.Verify() {
@@ -16,16 +16,20 @@ func TestTPKE(t *testing.T) {
 	tpke := NewTPKEFromDKG(dkg)
 
 	// Encrypt
-	msg := make([]*bls.G1Projective, 1)
-	msg[0], _ = bls.RandG1(rand.Reader)
-	cipherTexts := tpke.Encrypt(msg)
+	msgs := make([]*bls.G1Projective, 1000)
+	for i := 0; i < 1000; i++ {
+		msgs[i], _ = bls.RandG1(rand.Reader)
+	}
+	cipherTexts := tpke.Encrypt(msgs)
 
 	// Generate shares
 	shares := tpke.DecryptShare(cipherTexts)
 
 	// Decrypt
 	results, _ := Decrypt(cipherTexts, 5, shares)
-	if !msg[0].Equal(results[0]) {
-		t.Fatalf("decrypt failed.")
+	for i := 0; i < 1000; i++ {
+		if !msgs[i].Equal(results[i]) {
+			t.Fatalf("decrypt failed.")
+		}
 	}
 }
