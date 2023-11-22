@@ -36,14 +36,17 @@ func TestBenchmark(t *testing.T) {
 	shares := tpke.DecryptShare(encryptedSeeds)
 	t.Logf("share generation time: %v s", time.Since(t1))
 
-	// Decrypt
-	results := make([][]byte, 1000)
+	// Decrypt seeds
 	t2 := time.Now()
 	decryptedSeeds, _ := Decrypt(encryptedSeeds, 5, shares)
 	t.Logf("threshold decryption time: %v s", time.Since(t2))
+
+	// Decrypt scripts
+	ch := make(chan []byte, 100)
 	for i := 0; i < 1000; i++ {
-		results[i], _ = AESDecrypt(decryptedSeeds[i], cipherTexts[i])
+		go parallelAESDecrypt(decryptedSeeds[i], cipherTexts[i], ch)
 	}
+	results := decryptionHandler(ch, 1000)
 	t.Logf("total decryption time: %v s", time.Since(t2))
 
 	for i := 0; i < 1000; i++ {
@@ -56,4 +59,17 @@ func TestBenchmark(t *testing.T) {
 			}
 		}
 	}
+}
+
+func parallelAESDecrypt(seed *bls.G1Projective, input []byte, ch chan<- []byte) {
+	result, _ := AESDecrypt(seed, input)
+	ch <- result
+}
+
+func decryptionHandler(ch <-chan []byte, amount int) [][]byte {
+	results := make([][]byte, 0)
+	for i := 0; i < amount; i++ {
+		results = append(results, <-ch)
+	}
+	return results
 }
