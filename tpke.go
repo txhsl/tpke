@@ -82,7 +82,7 @@ func Decrypt(cts []*CipherText, threshold int, inputs map[int]([]*DecryptionShar
 				minor.NegAssign()
 				dec = dec.AddAffine(minor)
 			} else if coeff[j] < 0 {
-				dec = dec.Add(matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(-coeff[j]))))
+				dec = dec.AddAffine(matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(-coeff[j]))).ToAffine())
 			}
 		}
 		if d > 0 {

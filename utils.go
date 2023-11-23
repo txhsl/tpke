@@ -7,7 +7,16 @@ import (
 
 func feldman(matrix [][]int) (int, []int) {
 	// Compute D, D1
-	return determinant(matrix, len(matrix))
+	d, coeff := determinant(matrix, len(matrix))
+	g := d
+	for i := 0; i < len(coeff); i++ {
+		g = gcd(g, coeff[i])
+	}
+	d = d / g
+	for i := 0; i < len(coeff); i++ {
+		coeff[i] = coeff[i] / g
+	}
+	return d, coeff
 }
 
 func determinant(matrix [][]int, order int) (int, []int) {
@@ -73,4 +82,14 @@ func pkcs7UnPadding(data []byte) ([]byte, error) {
 		return nil, errors.New("unpadding failed")
 	}
 	return data[:(length - unPadding)], nil
+}
+
+func gcd(a, b int) int {
+	if b == 0 {
+		return a
+	}
+	if b < 0 {
+		b = -b
+	}
+	return gcd(b, a%b)
 }
