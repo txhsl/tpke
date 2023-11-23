@@ -24,7 +24,7 @@ func TestBenchmark(t *testing.T) {
 	// Build a 1MB script
 	script := make([]byte, 1048576)
 	rand.Read(script)
-	ch := make(chan Message, 100)
+	ch := make(chan Message, 10)
 
 	// Encrypt with different seeds
 	seeds := make([]*bls.G1Projective, sampleAmount)
@@ -48,11 +48,12 @@ func TestBenchmark(t *testing.T) {
 	t.Logf("threshold decryption time: %v", time.Since(t3))
 
 	// Decrypt scripts
+	t4 := time.Now()
 	for i := 0; i < sampleAmount; i++ {
 		go parallelAESDecrypt(i, decryptedSeeds[i], cipherTexts[i], ch)
 	}
 	results := messageHandler(ch, sampleAmount)
-	t.Logf("total decryption time: %v", time.Since(t3))
+	t.Logf("aes decryption time: %v", time.Since(t4))
 
 	for i := 0; i < 1000; i++ {
 		if !seeds[i].Equal(decryptedSeeds[i]) {

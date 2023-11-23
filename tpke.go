@@ -44,6 +44,7 @@ func (tpke *TPKE) DecryptShare(cts []*CipherText) map[int]([]*DecryptionShare) {
 		msg := <-ch
 		results[msg.index] = msg.shares
 	}
+	close(ch)
 
 	return results
 }
@@ -92,26 +93,20 @@ func Decrypt(cts []*CipherText, threshold int, inputs map[int]([]*DecryptionShar
 	d, coeff := feldman(matrix)
 	results := make([]*bls.G1Projective, len(cts))
 	// Compute M=C-d1/d
+	denominator := bls.FRReprToFR(bls.NewFRRepr(uint64(abs(d)))).Inverse()
+	if d < 0 {
+		denominator.NegAssign()
+	}
 	for i := 0; i < len(cts); i++ {
 		dec := bls.G1ProjectiveZero
 		for j := 0; j < threshold; j++ {
+			minor := matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(abs(coeff[j])))).ToAffine()
 			if coeff[j] > 0 {
-				minor := matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(coeff[j]))).ToAffine()
 				minor.NegAssign()
-				dec = dec.AddAffine(minor)
-			} else if coeff[j] < 0 {
-				dec = dec.AddAffine(matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(-coeff[j]))).ToAffine())
 			}
+			dec = dec.AddAffine(minor)
 		}
-		if d > 0 {
-			dec = dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(d))).Inverse().ToRepr())
-		} else {
-			tmp := dec.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(-d))).Inverse().ToRepr()).ToAffine()
-			tmp.NegAssign()
-			dec = tmp.ToProjective()
-		}
-
-		results[i] = cts[i].g1.Add(dec)
+		results[i] = cts[i].g1.Add(dec.MulFR(denominator.ToRepr()))
 	}
 
 	return results, nil
