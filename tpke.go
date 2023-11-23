@@ -13,6 +13,11 @@ type TPKE struct {
 	pubkey  *PublicKey
 }
 
+type DecryptMessage struct {
+	index  int
+	shares []*DecryptionShare
+}
+
 func NewTPKEFromDKG(dkg *DKG) *TPKE {
 	return &TPKE{
 		size:    dkg.size,
@@ -31,14 +36,27 @@ func (tpke *TPKE) Encrypt(msgs []*bls.G1Projective) []*CipherText {
 
 func (tpke *TPKE) DecryptShare(cts []*CipherText) map[int]([]*DecryptionShare) {
 	results := make(map[int]([]*DecryptionShare))
+	ch := make(chan DecryptMessage, tpke.size)
 	for i := 0; i < tpke.size; i++ {
-		shares := make([]*DecryptionShare, len(cts))
-		for j := 0; j < len(cts); j++ {
-			shares[j] = tpke.prvkeys[i+1].DecryptShare(cts[j])
-		}
-		results[i+1] = shares
+		go parallelDecryptShare(i+1, tpke.prvkeys[i+1], cts, ch)
 	}
+	for i := 0; i < tpke.size; i++ {
+		msg := <-ch
+		results[msg.index] = msg.shares
+	}
+
 	return results
+}
+
+func parallelDecryptShare(index int, key *PrivateKey, cts []*CipherText, ch chan<- DecryptMessage) {
+	shares := make([]*DecryptionShare, len(cts))
+	for j := 0; j < len(cts); j++ {
+		shares[j] = key.DecryptShare(cts[j])
+	}
+	ch <- DecryptMessage{
+		index:  index,
+		shares: shares,
+	}
 }
 
 type CipherText struct {
