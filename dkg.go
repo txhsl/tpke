@@ -13,6 +13,7 @@ import (
 type DKG struct {
 	size         int
 	threshold    int
+	scaler       int // Scaler for global public key, to speed up decryption
 	participants []*Participant
 	messageBox   [][][]byte
 }
@@ -36,6 +37,7 @@ func NewDKG(size int, threshold int) *DKG {
 	return &DKG{
 		size:         size,
 		threshold:    threshold,
+		scaler:       getEncryptionScaler(size, threshold),
 		participants: participants,
 	}
 }
@@ -93,7 +95,7 @@ func (dkg *DKG) PublishPublicKey() *PublicKey {
 		g1 = g1.Add(dkg.participants[i].pvss.public.commitment.coeff[0])
 	}
 	return &PublicKey{
-		g1: g1,
+		g1: g1.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(dkg.scaler))).ToRepr()),
 	}
 }
 

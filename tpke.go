@@ -8,9 +8,11 @@ import (
 )
 
 type TPKE struct {
-	size    int
-	prvkeys map[int]*PrivateKey
-	pubkey  *PublicKey
+	size      int
+	threshold int
+	scaler    int
+	prvkeys   map[int]*PrivateKey
+	pubkey    *PublicKey
 }
 
 type DecryptMessage struct {
@@ -20,9 +22,11 @@ type DecryptMessage struct {
 
 func NewTPKEFromDKG(dkg *DKG) *TPKE {
 	return &TPKE{
-		size:    dkg.size,
-		prvkeys: dkg.GetPrivateKeys(),
-		pubkey:  dkg.PublishPublicKey(),
+		size:      dkg.size,
+		threshold: dkg.threshold,
+		scaler:    dkg.scaler,
+		prvkeys:   dkg.GetPrivateKeys(),
+		pubkey:    dkg.PublishPublicKey(),
 	}
 }
 
@@ -69,37 +73,39 @@ type DecryptionShare struct {
 	g1 *bls.G1Projective
 }
 
-func Decrypt(cts []*CipherText, threshold int, inputs map[int]([]*DecryptionShare)) ([]*bls.G1Projective, error) {
-	if len(inputs) < threshold {
+func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)) ([]*bls.G1Projective, error) {
+	if len(inputs) < tpke.threshold {
 		return nil, errors.New("not enough share")
 	}
 
-	matrix := make([][]int, threshold)                // size=threshold*threshold
-	matrixG1 := make([][]*DecryptionShare, threshold) // size=threshold*len(cts)
+	matrix := make([][]int, tpke.threshold)                // size=threshold*threshold
+	matrixG1 := make([][]*DecryptionShare, tpke.threshold) // size=threshold*len(cts)
 	i := 0
 	for index, v := range inputs {
-		row := make([]int, threshold)
-		for j := 0; j < threshold; j++ {
+		row := make([]int, tpke.threshold)
+		for j := 0; j < tpke.threshold; j++ {
 			row[j] = int(math.Pow(float64(index), float64(j)))
 		}
 		matrix[i] = row
 		matrixG1[i] = v
 		i++
-		if i >= threshold {
+		if i >= tpke.threshold {
 			break
 		}
 	}
 
+	// Be aware of the integer overflow when the size and threshold of tpke grow big
 	d, coeff := feldman(matrix)
+	d = tpke.scaler / d
 	results := make([]*bls.G1Projective, len(cts))
 	// Compute M=C-d1/d
-	denominator := bls.FRReprToFR(bls.NewFRRepr(uint64(abs(d)))).Inverse()
+	denominator := bls.FRReprToFR(bls.NewFRRepr(uint64(abs(d))))
 	if d < 0 {
 		denominator.NegAssign()
 	}
 	for i := 0; i < len(cts); i++ {
 		dec := bls.G1ProjectiveZero
-		for j := 0; j < threshold; j++ {
+		for j := 0; j < tpke.threshold; j++ {
 			minor := matrixG1[j][i].g1.MulFR(bls.NewFRRepr(uint64(abs(coeff[j])))).ToAffine()
 			if coeff[j] > 0 {
 				minor.NegAssign()

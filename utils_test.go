@@ -1,6 +1,8 @@
 package tpke
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestDeterminant(t *testing.T) {
 	matrix := [][]int{{7, 8, 9, 4, 3}, {4, 9, 7, 0, 0}, {3, 6, 1, 0, 0}, {0, 5, 6, 0, 0}, {0, 6, 8, 0, 0}}

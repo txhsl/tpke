@@ -10,10 +10,12 @@ import (
 
 func TestBenchmark(t *testing.T) {
 	sampleAmount := 1000
+	size := 7
+	threshold := 5
 
 	// DKG
 	t1 := time.Now()
-	dkg := NewDKG(7, 5)
+	dkg := NewDKG(size, threshold)
 	dkg = dkg.Prepare()
 	if !dkg.Verify() {
 		t.Fatalf("invalid pvss.")
@@ -24,7 +26,7 @@ func TestBenchmark(t *testing.T) {
 	// Build a 1MB script
 	script := make([]byte, 1048576)
 	rand.Read(script)
-	ch := make(chan Message, 10)
+	ch := make(chan Message, 100)
 
 	// Encrypt with different seeds
 	seeds := make([]*bls.G1Projective, sampleAmount)
@@ -44,7 +46,7 @@ func TestBenchmark(t *testing.T) {
 
 	// Decrypt seeds
 	t3 := time.Now()
-	decryptedSeeds, _ := Decrypt(encryptedSeeds, 5, shares)
+	decryptedSeeds, _ := tpke.Decrypt(encryptedSeeds, shares)
 	t.Logf("threshold decryption time: %v", time.Since(t3))
 
 	// Decrypt scripts

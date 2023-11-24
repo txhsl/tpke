@@ -3,6 +3,7 @@ package tpke
 import (
 	"bytes"
 	"errors"
+	"math"
 )
 
 func feldman(matrix [][]int) (int, []int) {
@@ -15,6 +16,12 @@ func feldman(matrix [][]int) (int, []int) {
 	d = d / g
 	for i := 0; i < len(coeff); i++ {
 		coeff[i] = coeff[i] / g
+	}
+	if d < 0 {
+		d = -d
+		for i := 0; i < len(coeff); i++ {
+			coeff[i] = -coeff[i]
+		}
 	}
 	return d, coeff
 }
@@ -94,9 +101,40 @@ func gcd(a, b int) int {
 	return gcd(b, a%b)
 }
 
+func lcm(a, b int) int {
+	return a * b / gcd(a, b)
+}
+
 func abs(a int) int {
 	if a < 0 {
 		return -a
 	}
 	return a
+}
+
+// To improve computation performance
+func getEncryptionScaler(size int, threshold int) int {
+	matrix := make([][]int, threshold) // size=threshold*threshold
+	return searchDLCM(matrix, 1, 0, 0, size, threshold)
+}
+
+func searchDLCM(matrix [][]int, l int, pos int, offset int, size int, threshold int) int {
+	if pos == threshold {
+		d, coeff := feldman(matrix)
+		g := d
+		for i := 0; i < len(coeff); i++ {
+			g = gcd(g, coeff[i])
+		}
+		d = d / g
+		return abs(d)
+	}
+	for i := pos + offset; i < size-threshold+pos+1; i++ {
+		row := make([]int, threshold)
+		for j := 0; j < threshold; j++ {
+			row[j] = int(math.Pow(float64(i+1), float64(j)))
+		}
+		matrix[pos] = row
+		l = lcm(l, searchDLCM(matrix, l, pos+1, i-pos, size, threshold))
+	}
+	return l
 }
