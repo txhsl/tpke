@@ -17,8 +17,9 @@ func TestBenchmark(t *testing.T) {
 	t1 := time.Now()
 	dkg := NewDKG(size, threshold)
 	dkg = dkg.Prepare()
-	if !dkg.Verify() {
-		t.Fatalf("invalid pvss.")
+	err := dkg.Verify()
+	if err != nil {
+		t.Fatalf(err.Error())
 	}
 	tpke := NewTPKEFromDKG(dkg)
 	t.Logf("dkg time: %v", time.Since(t1))
@@ -26,7 +27,7 @@ func TestBenchmark(t *testing.T) {
 	// Build a 1MB script
 	script := make([]byte, 1048576)
 	rand.Read(script)
-	ch := make(chan Message, 100)
+	ch := make(chan Message, 10)
 
 	// Encrypt with different seeds
 	seeds := make([]*bls.G1Projective, sampleAmount)
@@ -37,7 +38,10 @@ func TestBenchmark(t *testing.T) {
 	for i := 0; i < sampleAmount; i++ {
 		go parallelAESEncrypt(i, seeds[i], script, ch)
 	}
-	cipherTexts := messageHandler(ch, sampleAmount)
+	cipherTexts, err := messageHandler(ch, sampleAmount)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 
 	// Generate shares
 	t2 := time.Now()
@@ -46,7 +50,10 @@ func TestBenchmark(t *testing.T) {
 
 	// Decrypt seeds
 	t3 := time.Now()
-	decryptedSeeds, _ := tpke.Decrypt(encryptedSeeds, shares)
+	decryptedSeeds, err := tpke.Decrypt(encryptedSeeds, shares)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 	t.Logf("threshold decryption time: %v", time.Since(t3))
 
 	// Decrypt scripts
@@ -54,7 +61,10 @@ func TestBenchmark(t *testing.T) {
 	for i := 0; i < sampleAmount; i++ {
 		go parallelAESDecrypt(i, decryptedSeeds[i], cipherTexts[i], ch)
 	}
-	results := messageHandler(ch, sampleAmount)
+	results, err := messageHandler(ch, sampleAmount)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 	t.Logf("aes decryption time: %v", time.Since(t4))
 
 	for i := 0; i < 1000; i++ {
@@ -72,29 +82,35 @@ func TestBenchmark(t *testing.T) {
 type Message struct {
 	index int
 	data  []byte
+	err   error
 }
 
 func parallelAESEncrypt(index int, seed *bls.G1Projective, input []byte, ch chan<- Message) {
-	result, _ := AESEncrypt(seed, input)
+	result, err := AESEncrypt(seed, input)
 	ch <- Message{
 		index: index,
 		data:  result,
+		err:   err,
 	}
 }
 
 func parallelAESDecrypt(index int, seed *bls.G1Projective, input []byte, ch chan<- Message) {
-	result, _ := AESDecrypt(seed, input)
+	result, err := AESDecrypt(seed, input)
 	ch <- Message{
 		index: index,
 		data:  result,
+		err:   err,
 	}
 }
 
-func messageHandler(ch <-chan Message, amount int) [][]byte {
+func messageHandler(ch <-chan Message, amount int) ([][]byte, error) {
 	results := make([][]byte, amount)
 	for i := 0; i < amount; i++ {
 		msg := <-ch
+		if msg.err != nil {
+			return nil, msg.err
+		}
 		results[msg.index] = msg.data
 	}
-	return results
+	return results, nil
 }

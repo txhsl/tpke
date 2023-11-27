@@ -12,8 +12,9 @@ func TestTPKE(t *testing.T) {
 	threshold := 5
 	dkg := NewDKG(size, threshold)
 	dkg = dkg.Prepare()
-	if !dkg.Verify() {
-		t.Fatalf("invalid pvss.")
+	err := dkg.Verify()
+	if err != nil {
+		t.Fatalf(err.Error())
 	}
 	tpke := NewTPKEFromDKG(dkg)
 
@@ -26,7 +27,10 @@ func TestTPKE(t *testing.T) {
 	shares := tpke.DecryptShare(cipherTexts)
 
 	// Decrypt
-	results, _ := tpke.Decrypt(cipherTexts, shares)
+	results, err := tpke.Decrypt(cipherTexts, shares)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
 	if !msg[0].Equal(results[0]) {
 		t.Fatalf("decryption failed.")
 	}

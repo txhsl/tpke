@@ -64,11 +64,11 @@ func (dkg *DKG) Prepare() *DKG {
 	return dkg
 }
 
-func (dkg *DKG) Verify() bool {
+func (dkg *DKG) Verify() error {
 	for i := 0; i < dkg.size; i++ {
 		// Verify PVSS
 		if !dkg.participants[i].VerifyPVSS() {
-			return false
+			return NewDKGPVSSError()
 		}
 	}
 	for i := 0; i < dkg.size; i++ {
@@ -79,13 +79,13 @@ func (dkg *DKG) Verify() bool {
 			fi := bls.FRReprToFR(bls.FRReprFromBytes([32]byte(ss)))
 			commitment := dkg.participants[j].pvss
 			if !bls.Pairing(commitment.r1.MulFR(fi.ToRepr()), bls.G2ProjectiveOne).Equals(bls.Pairing(commitment.bigf[i], commitment.r2)) {
-				return false
+				return NewDKGSecretError()
 			}
 			// Cache received secrets
 			dkg.participants[i].receivedSecrets[j] = fi
 		}
 	}
-	return true
+	return nil
 }
 
 func (dkg *DKG) PublishPublicKey() *PublicKey {

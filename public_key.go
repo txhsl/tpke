@@ -14,6 +14,7 @@ type PublicKey struct {
 
 func NewPublicKey(scs []SecretCommitment) *PublicKey {
 	g1 := scs[0].commitment.coeff[0].Copy()
+	// Add up A0
 	for i := 0; i < len(scs); i++ {
 		g1 = g1.Add(scs[i].commitment.coeff[0])
 	}
@@ -28,11 +29,14 @@ func (pk *PublicKey) Encrypt(msg *bls.G1Projective) *CipherText {
 	uRng := rng.NewUniformGenerator(int64(r1.Int()))
 	r := bls.NewFRRepr(uint64(uRng.Int64()))
 
+	// C=M+rpk, R1=rG1, R2=rG2
 	g1 := msg.Add(pk.g1.MulFR(r))
-	bigR := bls.G1ProjectiveOne.MulFR(r)
+	bigR1 := bls.G1ProjectiveOne.MulFR(r)
+	bigR2 := bls.G2ProjectiveOne.MulFR(r)
 
 	return &CipherText{
-		g1:   g1,
-		bigR: bigR,
+		cMsg:       g1,
+		bigR:       bigR1,
+		commitment: bigR2,
 	}
 }

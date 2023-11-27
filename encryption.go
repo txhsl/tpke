@@ -4,20 +4,20 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
-	"errors"
 
 	"github.com/phoreproject/bls"
 )
 
 func AESEncrypt(g1 *bls.G1Projective, msg []byte) ([]byte, error) {
 	if len(msg) < 1 {
-		return nil, errors.New("empty message")
+		return nil, NewAESMessageError()
 	}
+	// Take g1 as the input of sha256 to generate an aes key
 	seed := g1.ToAffine().SerializeBytes()
 	hash := sha256.Sum256(seed[0:96])
 	block, err := aes.NewCipher(hash[0:32])
 	if err != nil {
-		return nil, err
+		return nil, NewAESEncryptionError()
 	}
 	blockSize := block.BlockSize()
 
@@ -31,13 +31,14 @@ func AESEncrypt(g1 *bls.G1Projective, msg []byte) ([]byte, error) {
 
 func AESDecrypt(g1 *bls.G1Projective, cipherText []byte) ([]byte, error) {
 	if len(cipherText) < 1 {
-		return nil, errors.New("empty ciphertext")
+		return nil, NewAESCiphertextError()
 	}
+	// Take g1 as the input of sha256 to generate an aes key
 	seed := g1.ToAffine().SerializeBytes()
 	hash := sha256.Sum256(seed[0:96])
 	block, err := aes.NewCipher(hash[0:32])
 	if err != nil {
-		return nil, err
+		return nil, NewAESDecryptionError()
 	}
 	blockSize := block.BlockSize()
 
@@ -46,7 +47,7 @@ func AESDecrypt(g1 *bls.G1Projective, cipherText []byte) ([]byte, error) {
 	blockMode.CryptBlocks(decrypted, cipherText)
 	result, err := pkcs7UnPadding(decrypted)
 	if err != nil {
-		return nil, err
+		return nil, NewAESError(err.Error())
 	}
 
 	return result, nil
