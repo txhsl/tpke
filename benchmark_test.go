@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/phoreproject/bls"
+	bls "github.com/kilic/bls12-381"
 )
 
 func TestBenchmark(t *testing.T) {
@@ -30,9 +30,9 @@ func TestBenchmark(t *testing.T) {
 	ch := make(chan Message, 10)
 
 	// Encrypt with different seeds
-	seeds := make([]*bls.G1Projective, sampleAmount)
+	seeds := make([]*bls.PointG1, sampleAmount)
 	for i := 0; i < sampleAmount; i++ {
-		seeds[i], _ = bls.RandG1(rand.Reader)
+		seeds[i] = randPG1()
 	}
 	encryptedSeeds := tpke.Encrypt(seeds)
 	for i := 0; i < sampleAmount; i++ {
@@ -68,7 +68,7 @@ func TestBenchmark(t *testing.T) {
 	t.Logf("aes decryption time: %v", time.Since(t4))
 
 	for i := 0; i < 1000; i++ {
-		if !seeds[i].Equal(decryptedSeeds[i]) {
+		if !bls.NewG1().Equal(seeds[i], decryptedSeeds[i]) {
 			t.Fatalf("tpke decryption failed.")
 		}
 		for j := 0; j < len(script); j++ {
@@ -85,7 +85,7 @@ type Message struct {
 	err   error
 }
 
-func parallelAESEncrypt(index int, seed *bls.G1Projective, input []byte, ch chan<- Message) {
+func parallelAESEncrypt(index int, seed *bls.PointG1, input []byte, ch chan<- Message) {
 	result, err := AESEncrypt(seed, input)
 	ch <- Message{
 		index: index,
@@ -94,7 +94,7 @@ func parallelAESEncrypt(index int, seed *bls.G1Projective, input []byte, ch chan
 	}
 }
 
-func parallelAESDecrypt(index int, seed *bls.G1Projective, input []byte, ch chan<- Message) {
+func parallelAESDecrypt(index int, seed *bls.PointG1, input []byte, ch chan<- Message) {
 	result, err := AESDecrypt(seed, input)
 	ch <- Message{
 		index: index,

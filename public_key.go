@@ -1,41 +1,50 @@
 package tpke
 
 import (
+	"math/big"
 	"math/rand"
 	"time"
 
-	rng "github.com/leesper/go_rng"
-	"github.com/phoreproject/bls"
+	bls "github.com/kilic/bls12-381"
 )
 
 type PublicKey struct {
-	g1 *bls.G1Projective
+	pg1 *bls.PointG1
 }
 
-func NewPublicKey(scs []SecretCommitment) *PublicKey {
-	g1 := scs[0].commitment.coeff[0].Copy()
+func NewPublicKey(scs []*SecretCommitment, scaler int) *PublicKey {
+	g1 := bls.NewG1()
+	pg1 := g1.New().Set(scs[0].commitment.coeff[0])
 	// Add up A0
-	for i := 0; i < len(scs); i++ {
-		g1 = g1.Add(scs[i].commitment.coeff[0])
+	for i := 1; i < len(scs); i++ {
+		g1.Add(pg1, pg1, scs[i].commitment.coeff[0])
 	}
+	g1.MulScalar(pg1, pg1, bls.NewFr().FromBytes(big.NewInt(int64(scaler)).Bytes()))
 	return &PublicKey{
-		g1: g1,
+		pg1: pg1,
 	}
 }
 
-func (pk *PublicKey) Encrypt(msg *bls.G1Projective) *CipherText {
+func (pk *PublicKey) Encrypt(msg *bls.PointG1) *CipherText {
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
-	uRng := rng.NewUniformGenerator(int64(r1.Int()))
-	r := bls.NewFRRepr(uint64(uRng.Int64()))
+	r, _ := bls.NewFr().Rand(r1)
 
 	// C=M+rpk, R1=rG1, R2=rG2
-	g1 := msg.Add(pk.g1.MulFR(r))
-	bigR1 := bls.G1ProjectiveOne.MulFR(r)
-	bigR2 := bls.G2ProjectiveOne.MulFR(r)
+	g1 := bls.NewG1()
+	g2 := bls.NewG2()
+	bigR1 := g1.New()
+	bigR2 := g2.New()
+	g1.MulScalar(bigR1, g1.One(), r)
+	g2.MulScalar(bigR2, g2.One(), r)
+
+	rpk := g1.New()
+	cMsg := g1.New()
+	g1.MulScalar(rpk, pk.pg1, r)
+	g1.Add(cMsg, msg, rpk)
 
 	return &CipherText{
-		cMsg:       g1,
+		cMsg:       cMsg,
 		bigR:       bigR1,
 		commitment: bigR2,
 	}

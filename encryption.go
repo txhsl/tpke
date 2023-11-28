@@ -5,15 +5,15 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 
-	"github.com/phoreproject/bls"
+	bls "github.com/kilic/bls12-381"
 )
 
-func AESEncrypt(g1 *bls.G1Projective, msg []byte) ([]byte, error) {
+func AESEncrypt(pg1 *bls.PointG1, msg []byte) ([]byte, error) {
 	if len(msg) < 1 {
 		return nil, NewAESMessageError()
 	}
-	// Take g1 as the input of sha256 to generate an aes key
-	seed := g1.ToAffine().SerializeBytes()
+	// Take pg1 as the input of sha256 to generate an aes key
+	seed := bls.NewG1().ToBytes(pg1)
 	hash := sha256.Sum256(seed[0:96])
 	block, err := aes.NewCipher(hash[0:32])
 	if err != nil {
@@ -29,12 +29,12 @@ func AESEncrypt(g1 *bls.G1Projective, msg []byte) ([]byte, error) {
 	return encrypted, nil
 }
 
-func AESDecrypt(g1 *bls.G1Projective, cipherText []byte) ([]byte, error) {
+func AESDecrypt(pg1 *bls.PointG1, cipherText []byte) ([]byte, error) {
 	if len(cipherText) < 1 {
 		return nil, NewAESCiphertextError()
 	}
-	// Take g1 as the input of sha256 to generate an aes key
-	seed := g1.ToAffine().SerializeBytes()
+	// Take pg1 as the input of sha256 to generate an aes key
+	seed := bls.NewG1().ToBytes(pg1)
 	hash := sha256.Sum256(seed[0:96])
 	block, err := aes.NewCipher(hash[0:32])
 	if err != nil {

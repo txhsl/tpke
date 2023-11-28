@@ -1,10 +1,11 @@
 package tpke
 
 import (
-	"crypto/rand"
+	"math/rand"
 	"testing"
+	"time"
 
-	"github.com/phoreproject/bls"
+	bls "github.com/kilic/bls12-381"
 )
 
 func TestTPKE(t *testing.T) {
@@ -19,8 +20,8 @@ func TestTPKE(t *testing.T) {
 	tpke := NewTPKEFromDKG(dkg)
 
 	// Encrypt
-	msg := make([]*bls.G1Projective, 1)
-	msg[0], _ = bls.RandG1(rand.Reader)
+	msg := make([]*bls.PointG1, 1)
+	msg[0] = randPG1()
 	cipherTexts := tpke.Encrypt(msg)
 
 	// Generate shares
@@ -31,7 +32,16 @@ func TestTPKE(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	if !msg[0].Equal(results[0]) {
+	if !bls.NewG1().Equal(msg[0], results[0]) {
 		t.Fatalf("decryption failed.")
 	}
+}
+
+func randPG1() *bls.PointG1 {
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+	r, _ := bls.NewFr().Rand(r1)
+	g1 := bls.NewG1()
+	pg1 := g1.One()
+	return g1.MulScalar(pg1, pg1, r)
 }

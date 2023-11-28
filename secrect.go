@@ -1,6 +1,6 @@
 package tpke
 
-import "github.com/phoreproject/bls"
+import bls "github.com/kilic/bls12-381"
 
 type Secret struct {
 	poly Poly
@@ -19,7 +19,7 @@ func (s *Secret) Commitment() *SecretCommitment {
 	}
 }
 
-func (s *Secret) Evaluate(x bls.FR) *bls.FR {
+func (s *Secret) Evaluate(x bls.Fr) *bls.Fr {
 	return s.poly.evaluate(x)
 }
 
@@ -29,7 +29,7 @@ func (s *Secret) Equals(other *Secret) bool {
 	}
 
 	for i := range s.poly.coeff {
-		if !s.poly.coeff[i].Equals(other.poly.coeff[i]) {
+		if !s.poly.coeff[i].Equal(other.poly.coeff[i]) {
 			return false
 		}
 	}
@@ -41,7 +41,7 @@ type SecretCommitment struct {
 	commitment *Commitment
 }
 
-func (sc *SecretCommitment) Evaluate(x bls.FR) *bls.G1Projective {
+func (sc *SecretCommitment) Evaluate(x bls.Fr) *bls.PointG1 {
 	return sc.commitment.evaluate(x)
 }
 
@@ -49,9 +49,9 @@ func (sc *SecretCommitment) Equals(other *SecretCommitment) bool {
 	if len(sc.commitment.coeff) != len(other.commitment.coeff) {
 		return false
 	}
-
+	g1 := bls.NewG1()
 	for i := range sc.commitment.coeff {
-		if !sc.commitment.coeff[i].Equal(other.commitment.coeff[i]) {
+		if !g1.Equal(sc.commitment.coeff[i], other.commitment.coeff[i]) {
 			return false
 		}
 	}

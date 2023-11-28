@@ -1,7 +1,7 @@
 package tpke
 
-import "github.com/phoreproject/bls"
+import bls "github.com/kilic/bls12-381"
 
 type Signature struct {
-	G2 *bls.G2Projective
+	PG2 *bls.PointG2
 }

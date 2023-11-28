@@ -1,15 +1,12 @@
 package tpke
 
 import (
-	"crypto/rand"
 	"testing"
-
-	"github.com/phoreproject/bls"
 )
 
 func TestAES(t *testing.T) {
 	msg := []byte("pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza")
-	g1, _ := bls.RandG1(rand.Reader)
+	g1 := randPG1()
 	t.Logf("origin msg : %v", string(msg))
 
 	// Encrypt

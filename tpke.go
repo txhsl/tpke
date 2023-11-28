@@ -2,8 +2,9 @@ package tpke
 
 import (
 	"math"
+	"math/big"
 
-	"github.com/phoreproject/bls"
+	bls "github.com/kilic/bls12-381"
 )
 
 type TPKE struct {
@@ -34,7 +35,7 @@ func NewTPKEFromDKG(dkg *DKG) *TPKE {
 	}
 }
 
-func (tpke *TPKE) Encrypt(msgs []*bls.G1Projective) []*CipherText {
+func (tpke *TPKE) Encrypt(msgs []*bls.PointG1) []*CipherText {
 	results := make([]*CipherText, len(msgs))
 	for i := 0; i < len(msgs); i++ {
 		results[i] = tpke.pubkey.Encrypt(msgs[i])
@@ -69,16 +70,16 @@ func parallelDecryptShare(index int, key *PrivateKey, cts []*CipherText, ch chan
 }
 
 type CipherText struct {
-	cMsg       *bls.G1Projective
-	bigR       *bls.G1Projective
-	commitment *bls.G2Projective
+	cMsg       *bls.PointG1
+	bigR       *bls.PointG1
+	commitment *bls.PointG2
 }
 
 type DecryptionShare struct {
-	g1 *bls.G1Projective
+	pg1 *bls.PointG1
 }
 
-func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)) ([]*bls.G1Projective, error) {
+func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)) ([]*bls.PointG1, error) {
 	if len(inputs) < tpke.threshold {
 		return nil, NewTPKENotEnoughShareError()
 	}
@@ -104,29 +105,31 @@ func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)
 	// Be aware of the integer overflow when the size and threshold of tpke grow big
 	d, coeff := feldman(matrix)
 	d = tpke.scaler / d
-	results := make([]*bls.G1Projective, len(cts))
+	results := make([]*bls.PointG1, len(cts))
 	// Compute M=C-d1/d
-	denominator := bls.FRReprToFR(bls.NewFRRepr(uint64(abs(d))))
+	denominator := bls.NewFr().FromBytes(big.NewInt(int64(abs(d))).Bytes())
 	if d < 0 {
-		denominator.NegAssign()
+		denominator.Neg(denominator)
 	}
 	ch := make(chan VerifyMessage, len(cts))
+	g1 := bls.NewG1()
 	for i := 0; i < len(cts); i++ {
-		dec := bls.G1ProjectiveZero
+		rpk := g1.Zero()
 		// Add up shares with some factors as d1, and plus -1
 		for j := 0; j < tpke.threshold; j++ {
-			minor := shares[j][i].g1.MulFR(bls.NewFRRepr(uint64(abs(coeff[j])))).ToAffine()
+			minor := g1.New()
+			g1.MulScalar(minor, shares[j][i].pg1, bls.NewFr().FromBytes(big.NewInt(int64(abs(coeff[j]))).Bytes()))
 			if coeff[j] > 0 {
-				minor.NegAssign()
+				g1.Neg(minor, minor)
 			}
-			dec = dec.AddAffine(minor)
+			g1.Add(rpk, rpk, minor)
 		}
 		// Divide -d1 by d
-		rpk := dec.MulFR(denominator.ToRepr())
+		g1.MulScalar(rpk, rpk, denominator)
 		// Decrypt
-		results[i] = cts[i].cMsg.Add(rpk)
+		results[i] = g1.Add(g1.Zero(), cts[i].cMsg, rpk)
 		// Verify the decryption
-		go parallelVerify(i, cts[i], tpke.pubkey.g1, rpk, ch)
+		go parallelVerify(i, cts[i], tpke.pubkey.pg1, rpk, ch)
 	}
 	for i := 0; i < len(cts); i++ {
 		msg := <-ch
@@ -138,19 +141,26 @@ func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)
 	return results, nil
 }
 
-func parallelVerify(index int, ct *CipherText, pk *bls.G1Projective, rpk *bls.G1Projective, ch chan<- VerifyMessage) {
+func parallelVerify(index int, ct *CipherText, pk *bls.PointG1, rpk *bls.PointG1, ch chan<- VerifyMessage) {
 	// User sends an invalid commitment for his random r
-	if !bls.Pairing(ct.bigR, bls.G2ProjectiveOne).Equals(bls.Pairing(bls.G1ProjectiveOne, ct.commitment)) {
+	g1 := bls.NewG1()
+	g2 := bls.NewG2()
+	pairing := bls.NewEngine()
+	e1 := pairing.AddPair(ct.bigR, g2.One()).Result()
+	e2 := pairing.AddPair(g1.One(), ct.commitment).Result()
+	if !e1.Equal(e2) {
 		ch <- VerifyMessage{
 			index: index,
 			err:   NewTPKECiphertextError(),
 		}
 		return
 	}
-	cmt := ct.commitment.ToAffine()
-	cmt.NegAssign()
+	cmt := g2.New()
+	g2.Neg(cmt, ct.commitment)
 	// Decrypted rpk is not correct, decryption fails because of some evil share
-	if !bls.Pairing(pk, cmt.ToProjective()).Equals(bls.Pairing(rpk, bls.G2ProjectiveOne)) {
+	e1 = pairing.AddPair(pk, cmt).Result()
+	e2 = pairing.AddPair(rpk, g2.One()).Result()
+	if !e1.Equal(e2) {
 		ch <- VerifyMessage{
 			index: index,
 			err:   NewTPKEDecryptionError(),

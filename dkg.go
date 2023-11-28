@@ -4,10 +4,9 @@ import (
 	"math/rand"
 	"time"
 
-	ethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/ecies"
-	rng "github.com/leesper/go_rng"
-	"github.com/phoreproject/bls"
+	crypto "github.com/ethereum/go-ethereum/crypto"
+	ecies "github.com/ethereum/go-ethereum/crypto/ecies"
+	bls "github.com/kilic/bls12-381"
 )
 
 type DKG struct {
@@ -23,7 +22,7 @@ type Participant struct {
 	ethPubKey       *ecies.PublicKey
 	secret          *Secret
 	pvss            *PVSS
-	receivedSecrets []*bls.FR
+	receivedSecrets []*bls.Fr
 }
 
 func NewDKG(size int, threshold int) *DKG {
@@ -31,7 +30,7 @@ func NewDKG(size int, threshold int) *DKG {
 	source := rand.NewSource(time.Now().UnixNano())
 	random := rand.New(source)
 	for i := 0; i < size; i++ {
-		key, _ := ecies.GenerateKey(random, ethcrypto.S256(), nil)
+		key, _ := ecies.GenerateKey(random, crypto.S256(), nil)
 		participants[i] = NewParticipant(key)
 	}
 	return &DKG{
@@ -56,7 +55,7 @@ func (dkg *DKG) Prepare() *DKG {
 		sharedSecrets := dkg.participants[i].GenerateShares(dkg.size)
 		// Send messages
 		for j := 0; j < dkg.size; j++ {
-			sharedSecret := sharedSecrets[j].ToRepr().Bytes()
+			sharedSecret := sharedSecrets[j].ToBytes()
 			msg, _ := ecies.Encrypt(random, dkg.participants[j].ethPubKey, sharedSecret[:32], nil, nil)
 			dkg.messageBox[j][i] = msg
 		}
@@ -71,14 +70,21 @@ func (dkg *DKG) Verify() error {
 			return NewDKGPVSSError()
 		}
 	}
+	g1 := bls.NewG1()
+	g2 := bls.NewG2()
+	pairing := bls.NewEngine()
 	for i := 0; i < dkg.size; i++ {
-		dkg.participants[i].receivedSecrets = make([]*bls.FR, dkg.size)
+		dkg.participants[i].receivedSecrets = make([]*bls.Fr, dkg.size)
 		// Verify received secrets
 		for j := 0; j < dkg.size; j++ {
 			ss, _ := dkg.participants[i].ethPrvKey.Decrypt(dkg.messageBox[i][j], nil, nil)
-			fi := bls.FRReprToFR(bls.FRReprFromBytes([32]byte(ss)))
+			// e(r1*fi,g2)=e(bigfi,r2)
+			fi := bls.NewFr().FromBytes(ss)
 			commitment := dkg.participants[j].pvss
-			if !bls.Pairing(commitment.r1.MulFR(fi.ToRepr()), bls.G2ProjectiveOne).Equals(bls.Pairing(commitment.bigf[i], commitment.r2)) {
+			r1 := g1.New().Set(commitment.r1)
+			e1 := pairing.AddPair(g1.MulScalar(r1, r1, fi), g2.One()).Result()
+			e2 := pairing.AddPair(commitment.bigf[i], commitment.r2).Result()
+			if !e1.Equal(e2) {
 				return NewDKGSecretError()
 			}
 			// Cache received secrets
@@ -90,13 +96,11 @@ func (dkg *DKG) Verify() error {
 
 func (dkg *DKG) PublishPublicKey() *PublicKey {
 	// Compute public key S=sum(A0)
-	g1 := dkg.participants[0].pvss.public.commitment.coeff[0].Copy()
-	for i := 1; i < dkg.size; i++ {
-		g1 = g1.Add(dkg.participants[i].pvss.public.commitment.coeff[0])
+	scs := make([]*SecretCommitment, dkg.size)
+	for i := 0; i < dkg.size; i++ {
+		scs[i] = dkg.participants[i].pvss.public
 	}
-	return &PublicKey{
-		g1: g1.MulFR(bls.FRReprToFR(bls.NewFRRepr(uint64(dkg.scaler))).ToRepr()),
-	}
+	return NewPublicKey(scs, dkg.scaler)
 }
 
 func (dkg *DKG) GetPrivateKeys() map[int]*PrivateKey {
@@ -118,12 +122,11 @@ func (p *Participant) GenerateSecret(threshold int) {
 	p.secret = RandomSecret(threshold)
 }
 
-func (p *Participant) GenerateShares(size int) []*bls.FR {
+func (p *Participant) GenerateShares(size int) []*bls.Fr {
 	// Generate local random number
 	source := rand.NewSource(time.Now().UnixNano())
 	random := rand.New(source)
-	uRng := rng.NewUniformGenerator(int64(random.Int()))
-	r := bls.NewFRRepr(uint64(uRng.Int64()))
+	r, _ := bls.NewFr().Rand(random)
 
 	pvss, ss := GenerateSharedSecrets(r, size, p.secret)
 	p.pvss = pvss

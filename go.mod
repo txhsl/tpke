@@ -4,8 +4,7 @@ go 1.20
 
 require (
 	github.com/ethereum/go-ethereum v1.13.5
-	github.com/leesper/go_rng v0.0.0-20190531154944-a612b043e353
-	github.com/phoreproject/bls v0.0.0-20200525203911-a88a5ae26844
+	github.com/kilic/bls12-381 v0.1.0
 )
 
 require (

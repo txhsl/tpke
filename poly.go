@@ -4,36 +4,34 @@ import (
 	"math/rand"
 	"time"
 
-	rng "github.com/leesper/go_rng"
-	"github.com/phoreproject/bls"
+	bls "github.com/kilic/bls12-381"
 )
 
 type Poly struct {
-	coeff []*bls.FR
+	coeff []*bls.Fr
 }
 
 func randomPoly(degree int) *Poly {
-	coeff := make([]*bls.FR, degree)
+	coeff := make([]*bls.Fr, degree)
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
-	uRng := rng.NewUniformGenerator(int64(r1.Int()))
 
 	for i := range coeff {
-		fr := bls.NewFRRepr(uint64(uRng.Int64()))
-		coeff[i] = bls.FRReprToFR(fr)
+		fr, _ := bls.NewFr().Rand(r1)
+		coeff[i] = fr
 	}
 	return &Poly{
 		coeff: coeff,
 	}
 }
 
-func (p *Poly) evaluate(x bls.FR) *bls.FR {
+func (p *Poly) evaluate(x bls.Fr) *bls.Fr {
 	i := len(p.coeff) - 1
-	result := p.coeff[i].Copy()
+	result := bls.NewFr().Set(p.coeff[i])
 	for i >= 0 {
 		if i != len(p.coeff)-1 {
-			result.MulAssign(&x)
-			result.AddAssign(p.coeff[i])
+			result.Mul(result, &x)
+			result.Add(result, p.coeff[i])
 		}
 		i--
 	}
@@ -43,20 +41,20 @@ func (p *Poly) evaluate(x bls.FR) *bls.FR {
 func (p *Poly) AddAssign(op *Poly) {
 	pLen := len(p.coeff)
 	opLen := len(op.coeff)
-	FRZero := bls.FRReprToFR(bls.NewFRRepr(0))
+	FRZero := bls.NewFr().Zero()
 	for pLen < opLen {
 		p.coeff = append(p.coeff, FRZero)
 		pLen++
 	}
 	for i := range p.coeff {
-		p.coeff[i].AddAssign(op.coeff[i])
+		p.coeff[i].Add(p.coeff[i], op.coeff[i])
 	}
 }
 
-func (p *Poly) MulAssign(x bls.FR) {
+func (p *Poly) MulAssign(x bls.Fr) {
 	// TODO : check if op is zero
 	for _, c := range p.coeff {
-		c.MulAssign(&x)
+		c.Mul(c, &x)
 	}
 }
 
@@ -65,10 +63,12 @@ func (p *Poly) degree() int {
 }
 
 func (p *Poly) commitment() *Commitment {
-	g1One := bls.G1AffineOne
-	coeff := make([]*bls.G1Projective, len(p.coeff))
+	g1 := bls.NewG1()
+	ci := g1.New()
+	coeff := make([]*bls.PointG1, len(p.coeff))
 	for i := range coeff {
-		coeff[i] = g1One.MulFR(p.coeff[i].ToRepr())
+		g1.MulScalar(ci, g1.One(), p.coeff[i])
+		coeff[i] = g1.New().Set(ci)
 	}
 	return &Commitment{
 		coeff: coeff,
@@ -76,13 +76,14 @@ func (p *Poly) commitment() *Commitment {
 }
 
 type Commitment struct {
-	coeff []*bls.G1Projective
+	coeff []*bls.PointG1
 }
 
 func (c *Commitment) Clone() *Commitment {
-	coeff := make([]*bls.G1Projective, len(c.coeff))
+	g1 := bls.NewG1()
+	coeff := make([]*bls.PointG1, len(c.coeff))
 	for i := range coeff {
-		coeff[i] = c.coeff[i].Copy()
+		coeff[i] = g1.New().Set(c.coeff[i])
 	}
 	return &Commitment{
 		coeff: coeff,
@@ -93,16 +94,17 @@ func (c *Commitment) degree() int {
 	return len(c.coeff) - 1
 }
 
-func (c *Commitment) evaluate(x bls.FR) *bls.G1Projective {
+func (c *Commitment) evaluate(x bls.Fr) *bls.PointG1 {
+	g1 := bls.NewG1()
 	if len(c.coeff) == 0 {
-		return bls.G1ProjectiveZero
+		return g1.Zero()
 	}
 	i := len(c.coeff) - 1
-	result := c.coeff[i]
+	result := g1.New().Set(c.coeff[i])
 	for i >= 0 {
 		if i != len(c.coeff)-1 {
-			result = result.MulFR(x.ToRepr())
-			result = result.Add(c.coeff[i])
+			g1.MulScalar(result, result, &x)
+			g1.Add(result, result, c.coeff[i])
 		}
 		i--
 	}
@@ -110,13 +112,14 @@ func (c *Commitment) evaluate(x bls.FR) *bls.G1Projective {
 }
 
 func (c *Commitment) AddAssign(op *Commitment) {
+	g1 := bls.NewG1()
 	pLen := len(c.coeff)
 	opLen := len(op.coeff)
 	for pLen < opLen {
-		c.coeff = append(c.coeff, bls.G1ProjectiveZero)
+		c.coeff = append(c.coeff, g1.New().Zero())
 		pLen++
 	}
 	for i := range c.coeff {
-		c.coeff[i].Add(op.coeff[i])
+		g1.Add(c.coeff[i], c.coeff[i], op.coeff[i])
 	}
 }
