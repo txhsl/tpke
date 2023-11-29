@@ -118,7 +118,7 @@ func getEncryptionScaler(size int, threshold int) int {
 	return searchDLCM(matrix, 1, 0, 0, size, threshold)
 }
 
-func searchDLCM(matrix [][]int, l int, pos int, offset int, size int, threshold int) int {
+func searchDLCM(matrix [][]int, l, pos, offset, size, threshold int) int {
 	if pos == threshold {
 		d, coeff := feldman(matrix)
 		g := d
@@ -137,4 +137,23 @@ func searchDLCM(matrix [][]int, l int, pos int, offset int, size int, threshold 
 		l = lcm(l, searchDLCM(matrix, l, pos+1, i-pos, size, threshold))
 	}
 	return l
+}
+
+func getCombs(m int, n int) [][]int {
+	return searchCombs(make([]int, n), 0, 0, m, n)
+}
+
+func searchCombs(arr []int, pos, offset, m, n int) [][]int {
+	results := make([][]int, 0)
+	if pos == n {
+		comb := make([]int, n)
+		copy(comb, arr)
+		results = append(results, comb)
+		return results
+	}
+	for i := pos + offset; i < m; i++ {
+		arr[pos] = i
+		results = append(results, searchCombs(arr, pos+1, i-pos, m, n)...)
+	}
+	return results
 }

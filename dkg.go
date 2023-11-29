@@ -71,7 +71,6 @@ func (dkg *DKG) Verify() error {
 		}
 	}
 	g1 := bls.NewG1()
-	g2 := bls.NewG2()
 	pairing := bls.NewEngine()
 	for i := 0; i < dkg.size; i++ {
 		dkg.participants[i].receivedSecrets = make([]*bls.Fr, dkg.size)
@@ -82,7 +81,7 @@ func (dkg *DKG) Verify() error {
 			fi := bls.NewFr().FromBytes(ss)
 			commitment := dkg.participants[j].pvss
 			r1 := g1.New().Set(commitment.r1)
-			e1 := pairing.AddPair(g1.MulScalar(r1, r1, fi), g2.One()).Result()
+			e1 := pairing.AddPair(g1.MulScalar(r1, r1, fi), &bls.G2One).Result()
 			e2 := pairing.AddPair(commitment.bigf[i], commitment.r2).Result()
 			if !e1.Equal(e2) {
 				return NewDKGSecretError()

@@ -17,8 +17,7 @@ func TestBenchmark(t *testing.T) {
 	t1 := time.Now()
 	dkg := NewDKG(size, threshold)
 	dkg = dkg.Prepare()
-	err := dkg.Verify()
-	if err != nil {
+	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}
 	tpke := NewTPKEFromDKG(dkg)
@@ -29,12 +28,21 @@ func TestBenchmark(t *testing.T) {
 	rand.Read(script)
 	ch := make(chan Message, 10)
 
-	// Encrypt with different seeds
+	// Encrypt seeds
 	seeds := make([]*bls.PointG1, sampleAmount)
 	for i := 0; i < sampleAmount; i++ {
 		seeds[i] = randPG1()
 	}
 	encryptedSeeds := tpke.Encrypt(seeds)
+
+	// Verify encrypted seeds
+	for i := 0; i < len(encryptedSeeds); i++ {
+		if err := encryptedSeeds[i].Verify(); err != nil {
+			t.Fatalf("invalid seed message.")
+		}
+	}
+
+	// AES encrypt with different seeds
 	for i := 0; i < sampleAmount; i++ {
 		go parallelAESEncrypt(i, seeds[i], script, ch)
 	}

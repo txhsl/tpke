@@ -75,6 +75,17 @@ type CipherText struct {
 	commitment *bls.PointG2
 }
 
+func (ct *CipherText) Verify() error {
+	// User sends an invalid commitment for his random r
+	pairing := bls.NewEngine()
+	e1 := pairing.AddPair(ct.bigR, &bls.G2One).Result()
+	e2 := pairing.AddPair(&bls.G1One, ct.commitment).Result()
+	if !e1.Equal(e2) {
+		return NewTPKECiphertextError()
+	}
+	return nil
+}
+
 type DecryptionShare struct {
 	pg1 *bls.PointG1
 }
@@ -84,8 +95,8 @@ func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)
 		return nil, NewTPKENotEnoughShareError()
 	}
 
-	matrix := make([][]int, tpke.threshold)              // size=threshold*threshold
-	shares := make([][]*DecryptionShare, tpke.threshold) // size=threshold*len(cts)
+	matrix := make([][]int, len(inputs))              // size=len(inputs)*threshold, including all rows
+	shares := make([][]*DecryptionShare, len(inputs)) // size=len(inputs)*len(cts), including all shares
 
 	// Be aware of a random order of decryption shares
 	i := 0
@@ -97,11 +108,26 @@ func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)
 		matrix[i] = row
 		shares[i] = v
 		i++
-		if i >= tpke.threshold {
-			break
-		}
 	}
 
+	// Use different combinations to decrypt
+	combs := getCombs(len(inputs), tpke.threshold)
+	for _, v := range combs {
+		m := make([][]int, tpke.threshold)              // size=threshold*threshold, only seleted rows
+		s := make([][]*DecryptionShare, tpke.threshold) // size=threshold*len(cts), only seleted shares
+		for i := 0; i < len(v); i++ {
+			m[i] = matrix[v[i]]
+			s[i] = shares[v[i]]
+		}
+		results, err := tpke.tryDecrypt(cts, m, s)
+		if err == nil {
+			return results, nil
+		}
+	}
+	return nil, NewTPKEDecryptionError()
+}
+
+func (tpke *TPKE) tryDecrypt(cts []*CipherText, matrix [][]int, shares [][]*DecryptionShare) ([]*bls.PointG1, error) {
 	// Be aware of the integer overflow when the size and threshold of tpke grow big
 	d, coeff := feldman(matrix)
 	d = tpke.scaler / d
@@ -143,23 +169,13 @@ func (tpke *TPKE) Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare)
 
 func parallelVerify(index int, ct *CipherText, pk *bls.PointG1, rpk *bls.PointG1, ch chan<- VerifyMessage) {
 	// User sends an invalid commitment for his random r
-	g1 := bls.NewG1()
 	g2 := bls.NewG2()
 	pairing := bls.NewEngine()
-	e1 := pairing.AddPair(ct.bigR, g2.One()).Result()
-	e2 := pairing.AddPair(g1.One(), ct.commitment).Result()
-	if !e1.Equal(e2) {
-		ch <- VerifyMessage{
-			index: index,
-			err:   NewTPKECiphertextError(),
-		}
-		return
-	}
 	cmt := g2.New()
 	g2.Neg(cmt, ct.commitment)
-	// Decrypted rpk is not correct, decryption fails because of some evil share
-	e1 = pairing.AddPair(pk, cmt).Result()
-	e2 = pairing.AddPair(rpk, g2.One()).Result()
+	// Decrypted rpk is not correct, e(pk,rG2)!=e(rpk,G2), decryption fails
+	e1 := pairing.AddPair(pk, cmt).Result()
+	e2 := pairing.AddPair(rpk, &bls.G2One).Result()
 	if !e1.Equal(e2) {
 		ch <- VerifyMessage{
 			index: index,

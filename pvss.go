@@ -18,8 +18,8 @@ func GenerateSharedSecrets(r *bls.Fr, size int, secret *Secret) (*PVSS, []*bls.F
 	g2 := bls.NewG2()
 	r1 := g1.New()
 	r2 := g2.New()
-	g1.MulScalar(r1, g1.One(), r)
-	g2.MulScalar(r2, g2.One(), r)
+	g1.MulScalar(r1, &bls.G1One, r)
+	g2.MulScalar(r2, &bls.G2One, r)
 	f := make([]*bls.Fr, size)
 	bigf := make([]*bls.PointG1, size)
 	for i := 0; i < size; i++ {
@@ -40,12 +40,11 @@ func GenerateSharedSecrets(r *bls.Fr, size int, secret *Secret) (*PVSS, []*bls.F
 
 func (pvss *PVSS) Verify() bool {
 	g1 := bls.NewG1()
-	g2 := bls.NewG2()
 	// Verify e(R1,G2)==e(G1,R2)
 	pairing := bls.NewEngine()
-	pairing.AddPair(pvss.r1, g2.One())
+	pairing.AddPair(pvss.r1, &bls.G2One)
 	e1 := pairing.Result()
-	pairing.AddPair(g1.One(), pvss.r2)
+	pairing.AddPair(&bls.G1One, pvss.r2)
 	e2 := pairing.Result()
 	if !e1.Equal(e2) {
 		return false

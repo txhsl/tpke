@@ -35,8 +35,8 @@ func (pk *PublicKey) Encrypt(msg *bls.PointG1) *CipherText {
 	g2 := bls.NewG2()
 	bigR1 := g1.New()
 	bigR2 := g2.New()
-	g1.MulScalar(bigR1, g1.One(), r)
-	g2.MulScalar(bigR2, g2.One(), r)
+	g1.MulScalar(bigR1, &bls.G1One, r)
+	g2.MulScalar(bigR2, &bls.G2One, r)
 
 	rpk := g1.New()
 	cMsg := g1.New()

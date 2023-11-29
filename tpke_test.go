@@ -13,8 +13,7 @@ func TestTPKE(t *testing.T) {
 	threshold := 5
 	dkg := NewDKG(size, threshold)
 	dkg = dkg.Prepare()
-	err := dkg.Verify()
-	if err != nil {
+	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}
 	tpke := NewTPKEFromDKG(dkg)
@@ -24,8 +23,16 @@ func TestTPKE(t *testing.T) {
 	msg[0] = randPG1()
 	cipherTexts := tpke.Encrypt(msg)
 
+	// Verify ciphertext
+	if err := cipherTexts[0].Verify(); err != nil {
+		t.Fatalf("invalid ciphertext.")
+	}
+
 	// Generate shares
 	shares := tpke.DecryptShare(cipherTexts)
+
+	// Put a wrong share
+	shares[2][0].pg1 = randPG1()
 
 	// Decrypt
 	results, err := tpke.Decrypt(cipherTexts, shares)
@@ -42,6 +49,6 @@ func randPG1() *bls.PointG1 {
 	r1 := rand.New(s1)
 	r, _ := bls.NewFr().Rand(r1)
 	g1 := bls.NewG1()
-	pg1 := g1.One()
-	return g1.MulScalar(pg1, pg1, r)
+	pg1 := g1.New()
+	return g1.MulScalar(pg1, &bls.G1One, r)
 }

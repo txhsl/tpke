@@ -67,7 +67,7 @@ func (p *Poly) commitment() *Commitment {
 	ci := g1.New()
 	coeff := make([]*bls.PointG1, len(p.coeff))
 	for i := range coeff {
-		g1.MulScalar(ci, g1.One(), p.coeff[i])
+		g1.MulScalar(ci, &bls.G1One, p.coeff[i])
 		coeff[i] = g1.New().Set(ci)
 	}
 	return &Commitment{
