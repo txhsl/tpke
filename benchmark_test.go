@@ -36,10 +36,12 @@ func TestBenchmark(t *testing.T) {
 	encryptedSeeds := tpke.Encrypt(seeds)
 
 	// Verify encrypted seeds
-	for i := 0; i < len(encryptedSeeds); i++ {
-		if err := encryptedSeeds[i].Verify(); err != nil {
-			t.Fatalf("invalid seed message.")
-		}
+	for i := 0; i < sampleAmount; i++ {
+		go parallelCTVerify(encryptedSeeds[i], ch)
+	}
+	_, err := messageHandler(ch, sampleAmount)
+	if err != nil {
+		t.Fatalf(err.Error())
 	}
 
 	// AES encrypt with different seeds
@@ -91,6 +93,14 @@ type Message struct {
 	index int
 	data  []byte
 	err   error
+}
+
+func parallelCTVerify(ct *CipherText, ch chan<- Message) {
+	ch <- Message{
+		index: 0,
+		err:   ct.Verify(),
+		data:  nil,
+	}
 }
 
 func parallelAESEncrypt(index int, seed *bls.PointG1, input []byte, ch chan<- Message) {
