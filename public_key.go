@@ -49,3 +49,13 @@ func (pk *PublicKey) Encrypt(msg *bls.PointG1) *CipherText {
 		commitment: bigR2,
 	}
 }
+
+func (pk *PublicKey) Verify(msg []byte, sig *Signature) bool {
+	g2 := bls.NewG2()
+	g2Hash, _ := g2.HashToCurve(msg, Domain)
+
+	pairing := bls.NewEngine()
+	e1 := pairing.AddPair(pk.pg1, g2Hash).Result()
+	e2 := pairing.AddPair(&bls.G1One, sig.pg2).Result()
+	return e1.Equal(e2)
+}

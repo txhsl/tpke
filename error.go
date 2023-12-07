@@ -30,6 +30,13 @@ func NewDKGError(msg string) *CustomError {
 	}
 }
 
+func NewSigError(msg string) *CustomError {
+	return &CustomError{
+		Period:  "threshold signature",
+		Message: msg,
+	}
+}
+
 func NewAESMessageError() *CustomError {
 	return NewAESError("empty message")
 }
@@ -56,6 +63,10 @@ func NewTPKECiphertextError() *CustomError {
 
 func NewTPKEDecryptionError() *CustomError {
 	return NewTPKEError("decryption failed")
+}
+
+func NewSigNotEnoughShareError() *CustomError {
+	return NewSigError("not enough share")
 }
 
 func NewDKGPVSSError() *CustomError {

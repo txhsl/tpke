@@ -28,3 +28,14 @@ func (sk *PrivateKey) DecryptShare(ct *CipherText) *DecryptionShare {
 		pg1: pg1,
 	}
 }
+
+func (sk *PrivateKey) SignShare(msg []byte) *SignatureShare {
+	// S=H(msg)*sk
+	g2 := bls.NewG2()
+	g2Hash, _ := g2.HashToCurve(msg, Domain)
+	sig := g2.New()
+	g2.MulScalar(sig, g2Hash, sk.fr)
+	return &SignatureShare{
+		pg2: sig,
+	}
+}
