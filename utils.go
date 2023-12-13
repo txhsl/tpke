@@ -75,6 +75,9 @@ func laplace(matrix [][]int, r int, c int, order int) int {
 
 func pkcs7Padding(data []byte, blockSize int) []byte {
 	padding := blockSize - len(data)%blockSize
+	if padding == 0 {
+		padding = blockSize
+	}
 	padText := bytes.Repeat([]byte{byte(padding)}, padding)
 	return append(data, padText...)
 }
