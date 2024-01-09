@@ -20,7 +20,8 @@ func TestBenchmark(t *testing.T) {
 	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}
-	tpke := NewTPKEFromDKG(dkg)
+	pubkey := dkg.PublishPublicKey()
+	prvkeys := dkg.GetPrivateKeys()
 	t.Logf("dkg time: %v", time.Since(t1))
 
 	// Build a 1MB script
@@ -33,7 +34,7 @@ func TestBenchmark(t *testing.T) {
 	for i := 0; i < sampleAmount; i++ {
 		seeds[i] = randPG1()
 	}
-	encryptedSeeds := tpke.Encrypt(seeds)
+	encryptedSeeds := Encrypt(seeds, pubkey)
 
 	// Verify encrypted seeds
 	for i := 0; i < sampleAmount; i++ {
@@ -55,12 +56,12 @@ func TestBenchmark(t *testing.T) {
 
 	// Generate shares
 	t2 := time.Now()
-	shares := tpke.DecryptShare(encryptedSeeds)
+	shares := decryptShare(encryptedSeeds, prvkeys)
 	t.Logf("share generation time: %v", time.Since(t2))
 
 	// Decrypt seeds
 	t3 := time.Now()
-	decryptedSeeds, err := tpke.Decrypt(encryptedSeeds, shares)
+	decryptedSeeds, err := Decrypt(encryptedSeeds, shares, pubkey, threshold, dkg.scaler)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

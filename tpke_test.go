@@ -16,12 +16,13 @@ func TestTPKE(t *testing.T) {
 	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}
-	tpke := NewTPKEFromDKG(dkg)
+	pubkey := dkg.PublishPublicKey()
+	prvkeys := dkg.GetPrivateKeys()
 
 	// Encrypt
 	msg := make([]*bls.PointG1, 1)
 	msg[0] = randPG1()
-	cipherTexts := tpke.Encrypt(msg)
+	cipherTexts := Encrypt(msg, pubkey)
 
 	// Verify ciphertext
 	if err := cipherTexts[0].Verify(); err != nil {
@@ -29,13 +30,13 @@ func TestTPKE(t *testing.T) {
 	}
 
 	// Generate shares
-	shares := tpke.DecryptShare(cipherTexts)
+	shares := decryptShare(cipherTexts, prvkeys)
 
 	// Put a wrong share
 	shares[2][0].pg1 = randPG1()
 
 	// Decrypt
-	results, err := tpke.Decrypt(cipherTexts, shares)
+	results, err := Decrypt(cipherTexts, shares, pubkey, threshold, dkg.scaler)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
