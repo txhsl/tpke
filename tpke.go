@@ -72,6 +72,7 @@ func parallelDecryptShare(index int, key *PrivateKey, cts []*CipherText, ch chan
 	}
 }
 
+// PublicKey is used for immediate verification, method returns error if all combinations of shares fail
 func Decrypt(cts []*CipherText, inputs map[int]([]*DecryptionShare), pub *PublicKey, threshold int, scaler int) ([]*bls.PointG1, error) {
 	if len(inputs) < threshold {
 		return nil, NewTPKENotEnoughShareError()
