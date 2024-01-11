@@ -12,7 +12,7 @@ type PublicKey struct {
 	pg1 *bls.PointG1
 }
 
-func NewPublicKey(scs []*SecretCommitment, scaler int) *PublicKey {
+func NewGlobalPublicKey(scs []*SecretCommitment, scaler int) *PublicKey {
 	g1 := bls.NewG1()
 	pg1 := g1.New().Set(scs[0].commitment.coeff[0])
 	// Add up A0

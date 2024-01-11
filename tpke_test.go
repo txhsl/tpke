@@ -16,7 +16,7 @@ func TestTPKE(t *testing.T) {
 	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}
-	pubkey := dkg.PublishPublicKey()
+	pubkey := dkg.PublishGlobalPublicKey()
 	prvkeys := dkg.GetPrivateKeys()
 
 	// Encrypt

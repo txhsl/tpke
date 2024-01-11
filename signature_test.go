@@ -40,7 +40,7 @@ func TestThresholdSignature(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	sks := dkg.GetPrivateKeys()
-	pk := dkg.PublishPublicKey()
+	pk := dkg.PublishGlobalPublicKey()
 	scaler := dkg.scaler
 
 	// Test functionality

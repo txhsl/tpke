@@ -93,13 +93,13 @@ func (dkg *DKG) Verify() error {
 	return nil
 }
 
-func (dkg *DKG) PublishPublicKey() *PublicKey {
+func (dkg *DKG) PublishGlobalPublicKey() *PublicKey {
 	// Compute public key S=sum(A0)
 	scs := make([]*SecretCommitment, dkg.size)
 	for i := 0; i < dkg.size; i++ {
 		scs[i] = dkg.participants[i].pvss.public
 	}
-	return NewPublicKey(scs, dkg.scaler)
+	return NewGlobalPublicKey(scs, dkg.scaler)
 }
 
 func (dkg *DKG) GetPrivateKeys() map[int]*PrivateKey {

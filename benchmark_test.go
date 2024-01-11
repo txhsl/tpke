@@ -20,7 +20,7 @@ func TestBenchmark(t *testing.T) {
 	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}
-	pubkey := dkg.PublishPublicKey()
+	pubkey := dkg.PublishGlobalPublicKey()
 	prvkeys := dkg.GetPrivateKeys()
 	t.Logf("dkg time: %v", time.Since(t1))
 

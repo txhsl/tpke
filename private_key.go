@@ -19,6 +19,14 @@ func NewPrivateKey(secretShares []*bls.Fr) *PrivateKey {
 	}
 }
 
+func (sk *PrivateKey) GetPublicKey() *PublicKey {
+	g1 := bls.NewG1()
+	pg1 := g1.New()
+	return &PublicKey{
+		pg1: g1.MulScalar(pg1, &bls.G1One, sk.fr),
+	}
+}
+
 func (sk *PrivateKey) DecryptShare(ct *CipherText) *DecryptionShare {
 	// S=R1*sk
 	g1 := bls.NewG1()
