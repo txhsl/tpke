@@ -41,7 +41,7 @@ func TestThresholdSignature(t *testing.T) {
 	}
 	sks := dkg.GetPrivateKeys()
 	pk := dkg.PublishGlobalPublicKey()
-	scaler := dkg.scaler
+	scaler := dkg.GetScaler()
 
 	// Test functionality
 	msg := []byte("pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza")

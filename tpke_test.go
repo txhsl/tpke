@@ -36,7 +36,7 @@ func TestTPKE(t *testing.T) {
 	shares[2][0].pg1 = randPG1()
 
 	// Decrypt
-	results, err := Decrypt(cipherTexts, shares, pubkey, threshold, dkg.scaler)
+	results, err := Decrypt(cipherTexts, shares, pubkey, threshold, dkg.GetScaler())
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

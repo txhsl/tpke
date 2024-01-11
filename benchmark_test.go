@@ -61,7 +61,7 @@ func TestBenchmark(t *testing.T) {
 
 	// Decrypt seeds
 	t3 := time.Now()
-	decryptedSeeds, err := Decrypt(encryptedSeeds, shares, pubkey, threshold, dkg.scaler)
+	decryptedSeeds, err := Decrypt(encryptedSeeds, shares, pubkey, threshold, dkg.GetScaler())
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

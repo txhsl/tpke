@@ -110,6 +110,10 @@ func (dkg *DKG) GetPrivateKeys() map[int]*PrivateKey {
 	return pks
 }
 
+func (dkg *DKG) GetScaler() int {
+	return dkg.scaler
+}
+
 func NewParticipant(key *ecies.PrivateKey) *Participant {
 	return &Participant{
 		ethPrvKey: key,
