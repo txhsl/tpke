@@ -41,7 +41,7 @@ func NewDKG(size int, threshold int) *DKG {
 	}
 }
 
-func (dkg *DKG) Prepare() *DKG {
+func (dkg *DKG) Prepare() {
 	source := rand.NewSource(time.Now().UnixNano())
 	random := rand.New(source)
 	dkg.messageBox = make([][][]byte, dkg.size)
@@ -60,7 +60,6 @@ func (dkg *DKG) Prepare() *DKG {
 			dkg.messageBox[j][i] = msg
 		}
 	}
-	return dkg
 }
 
 func (dkg *DKG) Verify() error {

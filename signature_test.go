@@ -35,7 +35,7 @@ func TestThresholdSignature(t *testing.T) {
 	size := 7
 	threshold := 5
 	dkg := NewDKG(size, threshold)
-	dkg = dkg.Prepare()
+	dkg.Prepare()
 	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}

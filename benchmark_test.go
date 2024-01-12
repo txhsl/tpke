@@ -16,7 +16,7 @@ func TestBenchmark(t *testing.T) {
 	// DKG
 	t1 := time.Now()
 	dkg := NewDKG(size, threshold)
-	dkg = dkg.Prepare()
+	dkg.Prepare()
 	if err := dkg.Verify(); err != nil {
 		t.Fatalf(err.Error())
 	}
