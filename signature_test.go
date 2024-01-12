@@ -23,10 +23,7 @@ func TestSingleSignature(t *testing.T) {
 
 	msg := []byte("pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza")
 	share := sk.SignShare(msg)
-	sig := &Signature{
-		pg2: share.pg2,
-	}
-	if !pk.Verify(msg, sig) {
+	if !pk.VerifySigShare(msg, share) {
 		t.Fatalf("invalid signature")
 	}
 }

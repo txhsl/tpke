@@ -58,7 +58,7 @@ func AggregateAndVerify(pk *PublicKey, msg []byte, threshold int, inputs map[int
 			s[i] = shares[v[i]]
 		}
 		sig := aggregateShares(m, s, scaler)
-		if pk.Verify(msg, sig) {
+		if pk.VerifySig(msg, sig) {
 			return true, nil
 		}
 	}
