@@ -24,8 +24,36 @@ func (s *Signature) Equals(sig *Signature) bool {
 	return g2.Equal(s.pg2, sig.pg2)
 }
 
+func (s *Signature) ToBytes() []byte {
+	return bls.NewG2().ToBytes(s.pg2)
+}
+
+func BytesToSig(b []byte) (*Signature, error) {
+	pg2, err := bls.NewG2().FromBytes(b)
+	if err != nil {
+		return nil, err
+	}
+	return &Signature{
+		pg2: pg2,
+	}, nil
+}
+
 type SignatureShare struct {
 	pg2 *bls.PointG2
+}
+
+func (s *SignatureShare) ToBytes() []byte {
+	return bls.NewG2().ToBytes(s.pg2)
+}
+
+func BytesToSigShare(b []byte) (*SignatureShare, error) {
+	pg2, err := bls.NewG2().FromBytes(b)
+	if err != nil {
+		return nil, err
+	}
+	return &SignatureShare{
+		pg2: pg2,
+	}, nil
 }
 
 func AggregateAndVerify(pk *PublicKey, msg []byte, threshold int, inputs map[int]*SignatureShare, scaler int) (bool, error) {

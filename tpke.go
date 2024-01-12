@@ -36,6 +36,20 @@ type DecryptionShare struct {
 	pg1 *bls.PointG1
 }
 
+func (s *DecryptionShare) ToBytes() []byte {
+	return bls.NewG1().ToBytes(s.pg1)
+}
+
+func BytesToDecryptionShare(b []byte) (*DecryptionShare, error) {
+	pg1, err := bls.NewG1().FromBytes(b)
+	if err != nil {
+		return nil, err
+	}
+	return &DecryptionShare{
+		pg1: pg1,
+	}, nil
+}
+
 type decryptMessage struct {
 	index  int
 	shares []*DecryptionShare
