@@ -45,6 +45,28 @@ func TestTPKE(t *testing.T) {
 	}
 }
 
+func TestBytesEncoding(t *testing.T) {
+	ct := &CipherText{
+		cMsg:       &bls.G1One,
+		bigR:       &bls.G1One,
+		commitment: &bls.G2One,
+	}
+	b := ct.ToBytes()
+	result, err := BytesToCipherText(b)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	if !bls.NewG1().Equal(ct.cMsg, result.cMsg) {
+		t.Fatalf("cMsg mismatch.")
+	}
+	if !bls.NewG1().Equal(ct.bigR, result.bigR) {
+		t.Fatalf("bigR mismatch.")
+	}
+	if !bls.NewG2().Equal(ct.commitment, result.commitment) {
+		t.Fatalf("commitment mismatch.")
+	}
+}
+
 func randPG1() *bls.PointG1 {
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)

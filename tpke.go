@@ -16,12 +16,12 @@ type CipherText struct {
 }
 
 func (ct *CipherText) ToBytes() []byte {
-	out := make([]byte, 6*fpByteSize)
+	out := make([]byte, 8*fpByteSize)
 	g1 := bls.NewG1()
 	g2 := bls.NewG2()
 	copy(out[:2*fpByteSize], g1.ToBytes(ct.cMsg))
 	copy(out[2*fpByteSize:4*fpByteSize], g1.ToBytes(ct.bigR))
-	copy(out[4*fpByteSize:6*fpByteSize], g2.ToBytes(ct.commitment))
+	copy(out[4*fpByteSize:8*fpByteSize], g2.ToBytes(ct.commitment))
 	return out
 }
 
@@ -36,7 +36,7 @@ func BytesToCipherText(b []byte) (*CipherText, error) {
 	if err != nil {
 		return nil, err
 	}
-	commitment, err := g2.FromBytes(b[4*fpByteSize : 6*fpByteSize])
+	commitment, err := g2.FromBytes(b[4*fpByteSize : 8*fpByteSize])
 	if err != nil {
 		return nil, err
 	}
