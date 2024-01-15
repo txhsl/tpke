@@ -7,10 +7,44 @@ import (
 	bls "github.com/kilic/bls12-381"
 )
 
+var fpByteSize = 48
+
 type CipherText struct {
 	cMsg       *bls.PointG1
 	bigR       *bls.PointG1
 	commitment *bls.PointG2
+}
+
+func (ct *CipherText) ToBytes() []byte {
+	out := make([]byte, 6*fpByteSize)
+	g1 := bls.NewG1()
+	g2 := bls.NewG2()
+	copy(out[:2*fpByteSize], g1.ToBytes(ct.cMsg))
+	copy(out[2*fpByteSize:4*fpByteSize], g1.ToBytes(ct.bigR))
+	copy(out[4*fpByteSize:6*fpByteSize], g2.ToBytes(ct.commitment))
+	return out
+}
+
+func BytesToCipherText(b []byte) (*CipherText, error) {
+	g1 := bls.NewG1()
+	g2 := bls.NewG2()
+	cMsg, err := g1.FromBytes(b[:2*fpByteSize])
+	if err != nil {
+		return nil, err
+	}
+	bigR, err := g1.FromBytes(b[2*fpByteSize : 4*fpByteSize])
+	if err != nil {
+		return nil, err
+	}
+	commitment, err := g2.FromBytes(b[4*fpByteSize : 6*fpByteSize])
+	if err != nil {
+		return nil, err
+	}
+	return &CipherText{
+		cMsg:       cMsg,
+		bigR:       bigR,
+		commitment: commitment,
+	}, nil
 }
 
 func (ct *CipherText) Verify() error {
