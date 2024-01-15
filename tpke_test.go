@@ -1,9 +1,7 @@
 package tpke
 
 import (
-	"math/rand"
 	"testing"
-	"time"
 
 	bls "github.com/kilic/bls12-381"
 )
@@ -21,7 +19,7 @@ func TestTPKE(t *testing.T) {
 
 	// Encrypt
 	msg := make([]*bls.PointG1, 1)
-	msg[0] = randPG1()
+	msg[0] = RandPG1()
 	cipherTexts := Encrypt(msg, pubkey)
 
 	// Verify ciphertext
@@ -33,7 +31,7 @@ func TestTPKE(t *testing.T) {
 	shares := decryptShare(cipherTexts, prvkeys)
 
 	// Put a wrong share
-	shares[2][0].pg1 = randPG1()
+	shares[2][0].pg1 = RandPG1()
 
 	// Decrypt
 	results, err := Decrypt(cipherTexts, shares, pubkey, threshold, dkg.GetScaler())
@@ -65,13 +63,4 @@ func TestBytesEncoding(t *testing.T) {
 	if !bls.NewG2().Equal(ct.commitment, result.commitment) {
 		t.Fatalf("commitment mismatch.")
 	}
-}
-
-func randPG1() *bls.PointG1 {
-	s1 := rand.NewSource(time.Now().UnixNano())
-	r1 := rand.New(s1)
-	r, _ := bls.NewFr().Rand(r1)
-	g1 := bls.NewG1()
-	pg1 := g1.New()
-	return g1.MulScalar(pg1, &bls.G1One, r)
 }

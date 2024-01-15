@@ -32,7 +32,7 @@ func TestBenchmark(t *testing.T) {
 	// Encrypt seeds
 	seeds := make([]*bls.PointG1, sampleAmount)
 	for i := 0; i < sampleAmount; i++ {
-		seeds[i] = randPG1()
+		seeds[i] = RandPG1()
 	}
 	encryptedSeeds := Encrypt(seeds, pubkey)
 

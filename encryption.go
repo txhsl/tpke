@@ -4,6 +4,8 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
+	"math/rand"
+	"time"
 
 	bls "github.com/kilic/bls12-381"
 )
@@ -51,4 +53,13 @@ func AESDecrypt(pg1 *bls.PointG1, cipherText []byte) ([]byte, error) {
 	}
 
 	return result, nil
+}
+
+func RandPG1() *bls.PointG1 {
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+	r, _ := bls.NewFr().Rand(r1)
+	g1 := bls.NewG1()
+	pg1 := g1.New()
+	return g1.MulScalar(pg1, &bls.G1One, r)
 }

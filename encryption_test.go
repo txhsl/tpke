@@ -6,7 +6,7 @@ import (
 
 func TestAES(t *testing.T) {
 	msg := []byte("pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza pizza")
-	g1 := randPG1()
+	g1 := RandPG1()
 	t.Logf("origin msg : %v", string(msg))
 
 	// Encrypt
