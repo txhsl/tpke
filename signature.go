@@ -56,9 +56,9 @@ func BytesToSigShare(b []byte) (*SignatureShare, error) {
 	}, nil
 }
 
-func AggregateAndVerify(pk *PublicKey, msg []byte, threshold int, inputs map[int]*SignatureShare, scaler int) (bool, error) {
+func AggregateAndVerifySig(pk *PublicKey, msg []byte, threshold int, inputs map[int]*SignatureShare, scaler int) (*Signature, error) {
 	if len(inputs) < threshold {
-		return false, NewSigNotEnoughShareError()
+		return nil, NewSigNotEnoughShareError()
 	}
 
 	matrix := make([][]int, len(inputs))           // size=len(inputs)*threshold, including all rows
@@ -87,11 +87,11 @@ func AggregateAndVerify(pk *PublicKey, msg []byte, threshold int, inputs map[int
 		}
 		sig := aggregateShares(m, s, scaler)
 		if pk.VerifySig(msg, sig) {
-			return true, nil
+			return sig, nil
 		}
 	}
 
-	return false, nil
+	return nil, NewSigAggregationError()
 }
 
 func aggregateShares(matrix [][]int, shares []*SignatureShare, scaler int) *Signature {

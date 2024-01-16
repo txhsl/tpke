@@ -69,6 +69,10 @@ func NewSigNotEnoughShareError() *CustomError {
 	return NewSigError("not enough share")
 }
 
+func NewSigAggregationError() *CustomError {
+	return NewSigError("aggregation failed")
+}
+
 func NewDKGPVSSError() *CustomError {
 	return NewDKGError("invalid pvss")
 }

@@ -46,11 +46,11 @@ func TestThresholdSignature(t *testing.T) {
 	for i := 1; i <= len(sks); i++ {
 		shares[i] = sks[i].SignShare(msg)
 	}
-	result, err := AggregateAndVerify(pk, msg, threshold, shares, scaler)
+	sig, err := AggregateAndVerifySig(pk, msg, threshold, shares, scaler)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	if !result {
+	if sig == nil {
 		t.Fatalf("invalid signature")
 	}
 
