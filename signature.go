@@ -25,11 +25,11 @@ func (s *Signature) Equals(sig *Signature) bool {
 }
 
 func (s *Signature) ToBytes() []byte {
-	return bls.NewG2().ToBytes(s.pg2)
+	return bls.NewG2().ToCompressed(s.pg2)
 }
 
 func BytesToSig(b []byte) (*Signature, error) {
-	pg2, err := bls.NewG2().FromBytes(b)
+	pg2, err := bls.NewG2().FromCompressed(b)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +43,11 @@ type SignatureShare struct {
 }
 
 func (s *SignatureShare) ToBytes() []byte {
-	return bls.NewG2().ToBytes(s.pg2)
+	return bls.NewG2().ToCompressed(s.pg2)
 }
 
 func BytesToSigShare(b []byte) (*SignatureShare, error) {
-	pg2, err := bls.NewG2().FromBytes(b)
+	pg2, err := bls.NewG2().FromCompressed(b)
 	if err != nil {
 		return nil, err
 	}

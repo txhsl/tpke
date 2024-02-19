@@ -16,27 +16,27 @@ type CipherText struct {
 }
 
 func (ct *CipherText) ToBytes() []byte {
-	out := make([]byte, 8*fpByteSize)
+	out := make([]byte, 4*fpByteSize)
 	g1 := bls.NewG1()
 	g2 := bls.NewG2()
-	copy(out[:2*fpByteSize], g1.ToBytes(ct.cMsg))
-	copy(out[2*fpByteSize:4*fpByteSize], g1.ToBytes(ct.bigR))
-	copy(out[4*fpByteSize:8*fpByteSize], g2.ToBytes(ct.commitment))
+	copy(out[:fpByteSize], g1.ToCompressed(ct.cMsg))
+	copy(out[fpByteSize:2*fpByteSize], g1.ToCompressed(ct.bigR))
+	copy(out[2*fpByteSize:4*fpByteSize], g2.ToCompressed(ct.commitment))
 	return out
 }
 
 func BytesToCipherText(b []byte) (*CipherText, error) {
 	g1 := bls.NewG1()
 	g2 := bls.NewG2()
-	cMsg, err := g1.FromBytes(b[:2*fpByteSize])
+	cMsg, err := g1.FromCompressed(b[:fpByteSize])
 	if err != nil {
 		return nil, err
 	}
-	bigR, err := g1.FromBytes(b[2*fpByteSize : 4*fpByteSize])
+	bigR, err := g1.FromCompressed(b[fpByteSize : 2*fpByteSize])
 	if err != nil {
 		return nil, err
 	}
-	commitment, err := g2.FromBytes(b[4*fpByteSize : 8*fpByteSize])
+	commitment, err := g2.FromCompressed(b[2*fpByteSize : 4*fpByteSize])
 	if err != nil {
 		return nil, err
 	}
@@ -71,11 +71,11 @@ type DecryptionShare struct {
 }
 
 func (s *DecryptionShare) ToBytes() []byte {
-	return bls.NewG1().ToBytes(s.pg1)
+	return bls.NewG1().ToCompressed(s.pg1)
 }
 
 func BytesToDecryptionShare(b []byte) (*DecryptionShare, error) {
-	pg1, err := bls.NewG1().FromBytes(b)
+	pg1, err := bls.NewG1().FromCompressed(b)
 	if err != nil {
 		return nil, err
 	}
