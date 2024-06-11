@@ -157,7 +157,7 @@ func (dkg *DKG) PublishGlobalPublicKey() *PublicKey {
 	return NewGlobalPublicKey(scs, dkg.scaler)
 }
 
-func (dkg *DKG) GetPrivateKeysFromDKG() map[int]*PrivateKey {
+func (dkg *DKG) GetPrivateKeysFromPrepare() map[int]*PrivateKey {
 	pks := make(map[int]*PrivateKey)
 	for i := 0; i < dkg.size; i++ {
 		pks[i+1] = NewPrivateKey(dkg.participants[i].receivedSecrets)

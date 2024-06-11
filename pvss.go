@@ -65,7 +65,7 @@ func (pvss *PVSS) VerifyCommitment() bool {
 }
 
 func (pvss *PVSS) VerifyRenovate(op *PVSS) bool {
-	// verify the new pvss bigf is correctly biased by phi & delta
+	// verify the new pvss bigf is correctly biased by delta
 	if len(pvss.commitment.coeff) != len(op.commitment.coeff) {
 		return false
 	}

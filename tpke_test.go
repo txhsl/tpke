@@ -15,7 +15,7 @@ func TestTPKE(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()
-	prvkeys := dkg.GetPrivateKeysFromDKG()
+	prvkeys := dkg.GetPrivateKeysFromPrepare()
 
 	// Encrypt
 	msg := make([]*bls.PointG1, 1)
@@ -57,7 +57,7 @@ func TestReshareTPKEOld(t *testing.T) {
 	if err := dkg.VerifyReshare(); err != nil {
 		t.Fatalf(err.Error())
 	}
-	prvkeys := dkg.GetPrivateKeysFromDKG()
+	prvkeys := dkg.GetPrivateKeysFromPrepare()
 
 	// Encrypt with old key
 	msg := make([]*bls.PointG1, 1)
@@ -104,7 +104,7 @@ func TestReshareTPKENew(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()
-	prvkeys := dkg.GetPrivateKeysFromDKG()
+	prvkeys := dkg.GetPrivateKeysFromPrepare()
 
 	// Encrypt with new key
 	msg := make([]*bls.PointG1, 1)

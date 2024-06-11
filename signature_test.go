@@ -36,7 +36,7 @@ func TestThresholdSignature(t *testing.T) {
 	if err := dkg.VerifyPrepare(); err != nil {
 		t.Fatalf(err.Error())
 	}
-	sks := dkg.GetPrivateKeysFromDKG()
+	sks := dkg.GetPrivateKeysFromPrepare()
 	pk := dkg.PublishGlobalPublicKey()
 	scaler := dkg.GetScaler()
 

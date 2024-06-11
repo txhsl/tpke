@@ -21,7 +21,7 @@ func TestBenchmark(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()
-	prvkeys := dkg.GetPrivateKeysFromDKG()
+	prvkeys := dkg.GetPrivateKeysFromPrepare()
 	t.Logf("dkg time: %v", time.Since(t1))
 
 	// Build a 1MB script
