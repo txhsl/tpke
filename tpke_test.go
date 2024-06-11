@@ -11,7 +11,7 @@ func TestTPKE(t *testing.T) {
 	threshold := 5
 	dkg := NewDKG(size, threshold)
 	dkg.Prepare()
-	if err := dkg.Verify(false); err != nil {
+	if err := dkg.VerifyPrepare(); err != nil {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()
@@ -48,13 +48,13 @@ func TestReshareTPKEOld(t *testing.T) {
 	threshold := 5
 	dkg := NewDKG(size, threshold)
 	dkg.Prepare()
-	if err := dkg.Verify(false); err != nil {
+	if err := dkg.VerifyPrepare(); err != nil {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()
 
 	dkg.Reshare()
-	if err := dkg.Verify(true); err != nil {
+	if err := dkg.VerifyReshare(); err != nil {
 		t.Fatalf(err.Error())
 	}
 	prvkeys := dkg.GetPrivateKeysFromDKG()
@@ -91,12 +91,16 @@ func TestReshareTPKENew(t *testing.T) {
 	threshold := 5
 	dkg := NewDKG(size, threshold)
 	dkg.Prepare()
-	if err := dkg.Verify(false); err != nil {
+	if err := dkg.VerifyPrepare(); err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	dkg.Reshare()
-	if err := dkg.Verify(true); err != nil {
+	if err := dkg.VerifyReshare(); err != nil {
+		t.Fatalf(err.Error())
+	}
+	dkg.Prepare()
+	if err := dkg.VerifyPrepare(); err != nil {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()

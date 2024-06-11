@@ -86,21 +86,17 @@ func (dkg *DKG) Reshare() {
 	}
 }
 
-func (dkg *DKG) Verify(isReshare bool) error {
+func (dkg *DKG) VerifyPrepare() error {
 	for i := 0; i < dkg.size; i++ {
 		// Verify PVSS
-		if !dkg.participants[i].VerifyPVSS() {
+		if !dkg.participants[i].VerifyPreparePVSS() {
 			return NewDKGPVSSError()
 		}
 	}
 	g1 := bls.NewG1()
 	pairing := bls.NewEngine()
 	for i := 0; i < dkg.size; i++ {
-		if isReshare {
-			dkg.participants[i].resharedSecrets = make([]*bls.Fr, dkg.size)
-		} else {
-			dkg.participants[i].receivedSecrets = make([]*bls.Fr, dkg.size)
-		}
+		dkg.participants[i].receivedSecrets = make([]*bls.Fr, dkg.size)
 		// Verify received secrets
 		for j := 0; j < dkg.size; j++ {
 			ss, _ := dkg.participants[i].ethPrvKey.Decrypt(dkg.messageBox[i][j], nil, nil)
@@ -113,14 +109,42 @@ func (dkg *DKG) Verify(isReshare bool) error {
 			if !e1.Equal(e2) {
 				return NewDKGSecretError()
 			}
-			if isReshare {
-				dkg.participants[i].resharedSecrets[j] = fi
-			} else {
-				// Cache received secrets
-				dkg.participants[i].receivedSecrets[j] = fi
-			}
+			// Cache received secrets
+			dkg.participants[i].receivedSecrets[j] = fi
 		}
 	}
+
+	return nil
+}
+
+func (dkg *DKG) VerifyReshare() error {
+	for i := 0; i < dkg.size; i++ {
+		// Verify PVSS
+		if !dkg.participants[i].VerifyResharePVSS() {
+			return NewDKGPVSSError()
+		}
+	}
+	g1 := bls.NewG1()
+	pairing := bls.NewEngine()
+	for i := 0; i < dkg.size; i++ {
+		dkg.participants[i].resharedSecrets = make([]*bls.Fr, dkg.size)
+		// Verify received secrets
+		for j := 0; j < dkg.size; j++ {
+			ss, _ := dkg.participants[i].ethPrvKey.Decrypt(dkg.messageBox[i][j], nil, nil)
+			// e(r1*fi,g2)=e(bigfi,r2)
+			fi := bls.NewFr().FromBytes(ss)
+			commitment := dkg.participants[j].pvss
+			r1 := g1.New().Set(commitment.r1)
+			e1 := pairing.AddPair(g1.MulScalar(r1, r1, fi), &bls.G2One).Result()
+			e2 := pairing.AddPair(commitment.bigf[i], commitment.r2).Result()
+			if !e1.Equal(e2) {
+				return NewDKGSecretError()
+			}
+			// Cache received secrets
+			dkg.participants[i].resharedSecrets[j] = fi
+		}
+	}
+
 	return nil
 }
 
@@ -180,12 +204,10 @@ func (p *Participant) GenerateShares(size int) []*bls.Fr {
 	return ss
 }
 
-func (p *Participant) VerifyPVSS() bool {
-	currentCheck := p.pvss.VerifyCommitment()
-	if p.lastPVSS != nil {
-		reshareCheck := p.pvss.VerifyRenovate(p.lastPVSS)
-		return currentCheck && reshareCheck
-	} else {
-		return currentCheck
-	}
+func (p *Participant) VerifyPreparePVSS() bool {
+	return p.pvss.VerifyCommitment()
+}
+
+func (p *Participant) VerifyResharePVSS() bool {
+	return p.pvss.VerifyCommitment() && p.pvss.VerifyRenovate(p.lastPVSS)
 }
