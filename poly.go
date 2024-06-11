@@ -123,3 +123,16 @@ func (c *Commitment) AddAssign(op *Commitment) {
 		g1.Add(c.coeff[i], c.coeff[i], op.coeff[i])
 	}
 }
+
+func (c *Commitment) Equals(oc *Commitment) bool {
+	if len(c.coeff) != len(oc.coeff) {
+		return false
+	}
+	g1 := bls.NewG1()
+	for i := range c.coeff {
+		if !g1.Equal(c.coeff[i], oc.coeff[i]) {
+			return false
+		}
+	}
+	return true
+}

@@ -21,7 +21,9 @@ type Participant struct {
 	ethPrvKey       *ecies.PrivateKey
 	ethPubKey       *ecies.PublicKey
 	secret          *Secret
+	lastPVSS        *PVSS
 	pvss            *PVSS
+	resharedSecrets []*bls.Fr
 	receivedSecrets []*bls.Fr
 }
 
@@ -62,7 +64,29 @@ func (dkg *DKG) Prepare() {
 	}
 }
 
-func (dkg *DKG) Verify() error {
+func (dkg *DKG) Reshare() {
+	source := rand.NewSource(time.Now().UnixNano())
+	random := rand.New(source)
+	dkg.messageBox = make([][][]byte, dkg.size)
+	for i := 0; i < dkg.size; i++ {
+		dkg.messageBox[i] = make([][]byte, dkg.size)
+	}
+	// Share secret from old to new
+	for i := 0; i < dkg.size; i++ {
+		// Bias local secret with delta
+		dkg.participants[i].RenovateSecret()
+		// Compute PVSS
+		sharedSecrets := dkg.participants[i].GenerateShares(dkg.size)
+		// Send messages
+		for j := 0; j < dkg.size; j++ {
+			sharedSecret := sharedSecrets[j].ToBytes()
+			msg, _ := ecies.Encrypt(random, dkg.participants[j].ethPubKey, sharedSecret[:32], nil, nil)
+			dkg.messageBox[j][i] = msg
+		}
+	}
+}
+
+func (dkg *DKG) Verify(isReshare bool) error {
 	for i := 0; i < dkg.size; i++ {
 		// Verify PVSS
 		if !dkg.participants[i].VerifyPVSS() {
@@ -72,7 +96,11 @@ func (dkg *DKG) Verify() error {
 	g1 := bls.NewG1()
 	pairing := bls.NewEngine()
 	for i := 0; i < dkg.size; i++ {
-		dkg.participants[i].receivedSecrets = make([]*bls.Fr, dkg.size)
+		if isReshare {
+			dkg.participants[i].resharedSecrets = make([]*bls.Fr, dkg.size)
+		} else {
+			dkg.participants[i].receivedSecrets = make([]*bls.Fr, dkg.size)
+		}
 		// Verify received secrets
 		for j := 0; j < dkg.size; j++ {
 			ss, _ := dkg.participants[i].ethPrvKey.Decrypt(dkg.messageBox[i][j], nil, nil)
@@ -85,8 +113,12 @@ func (dkg *DKG) Verify() error {
 			if !e1.Equal(e2) {
 				return NewDKGSecretError()
 			}
-			// Cache received secrets
-			dkg.participants[i].receivedSecrets[j] = fi
+			if isReshare {
+				dkg.participants[i].resharedSecrets[j] = fi
+			} else {
+				// Cache received secrets
+				dkg.participants[i].receivedSecrets[j] = fi
+			}
 		}
 	}
 	return nil
@@ -94,17 +126,25 @@ func (dkg *DKG) Verify() error {
 
 func (dkg *DKG) PublishGlobalPublicKey() *PublicKey {
 	// Compute public key S=sum(A0)
-	scs := make([]*SecretCommitment, dkg.size)
+	scs := make([]*Commitment, dkg.size)
 	for i := 0; i < dkg.size; i++ {
-		scs[i] = dkg.participants[i].pvss.public
+		scs[i] = dkg.participants[i].pvss.commitment
 	}
 	return NewGlobalPublicKey(scs, dkg.scaler)
 }
 
-func (dkg *DKG) GetPrivateKeys() map[int]*PrivateKey {
+func (dkg *DKG) GetPrivateKeysFromDKG() map[int]*PrivateKey {
 	pks := make(map[int]*PrivateKey)
 	for i := 0; i < dkg.size; i++ {
 		pks[i+1] = NewPrivateKey(dkg.participants[i].receivedSecrets)
+	}
+	return pks
+}
+
+func (dkg *DKG) GetPrivateKeysFromReshare() map[int]*PrivateKey {
+	pks := make(map[int]*PrivateKey)
+	for i := 0; i < dkg.size; i++ {
+		pks[i+1] = NewPrivateKey(dkg.participants[i].resharedSecrets)
 	}
 	return pks
 }
@@ -124,6 +164,10 @@ func (p *Participant) GenerateSecret(threshold int) {
 	p.secret = RandomSecret(threshold)
 }
 
+func (p *Participant) RenovateSecret() {
+	p.secret.BiasDelta()
+}
+
 func (p *Participant) GenerateShares(size int) []*bls.Fr {
 	// Generate local random number
 	source := rand.NewSource(time.Now().UnixNano())
@@ -131,10 +175,17 @@ func (p *Participant) GenerateShares(size int) []*bls.Fr {
 	r, _ := bls.NewFr().Rand(random)
 
 	pvss, ss := GenerateSharedSecrets(r, size, p.secret)
+	p.lastPVSS = p.pvss
 	p.pvss = pvss
 	return ss
 }
 
 func (p *Participant) VerifyPVSS() bool {
-	return p.pvss.Verify()
+	currentCheck := p.pvss.VerifyCommitment()
+	if p.lastPVSS != nil {
+		reshareCheck := p.pvss.VerifyRenovate(p.lastPVSS)
+		return currentCheck && reshareCheck
+	} else {
+		return currentCheck
+	}
 }

@@ -11,16 +11,102 @@ func TestTPKE(t *testing.T) {
 	threshold := 5
 	dkg := NewDKG(size, threshold)
 	dkg.Prepare()
-	if err := dkg.Verify(); err != nil {
+	if err := dkg.Verify(false); err != nil {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()
-	prvkeys := dkg.GetPrivateKeys()
+	prvkeys := dkg.GetPrivateKeysFromDKG()
 
 	// Encrypt
 	msg := make([]*bls.PointG1, 1)
 	msg[0] = RandPG1()
 	cipherTexts := Encrypt(msg, pubkey)
+
+	// Verify ciphertext
+	if err := cipherTexts[0].Verify(); err != nil {
+		t.Fatalf("invalid ciphertext.")
+	}
+
+	// Generate shares
+	shares := decryptShare(cipherTexts, prvkeys)
+
+	// Put a wrong share
+	shares[2][0].pg1 = RandPG1()
+
+	// Decrypt
+	results, err := Decrypt(cipherTexts, shares, pubkey, threshold, dkg.GetScaler())
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	if !bls.NewG1().Equal(msg[0], results[0]) {
+		t.Fatalf("decryption failed.")
+	}
+}
+
+func TestReshareTPKEOld(t *testing.T) {
+	size := 7
+	threshold := 5
+	dkg := NewDKG(size, threshold)
+	dkg.Prepare()
+	if err := dkg.Verify(false); err != nil {
+		t.Fatalf(err.Error())
+	}
+	pubkey := dkg.PublishGlobalPublicKey()
+
+	dkg.Reshare()
+	if err := dkg.Verify(true); err != nil {
+		t.Fatalf(err.Error())
+	}
+	prvkeys := dkg.GetPrivateKeysFromDKG()
+
+	// Encrypt with old key
+	msg := make([]*bls.PointG1, 1)
+	msg[0] = RandPG1()
+	cipherTexts := Encrypt(msg, pubkey)
+	cipherTexts[0].fromLastRound = true
+
+	// Verify ciphertext
+	if err := cipherTexts[0].Verify(); err != nil {
+		t.Fatalf("invalid ciphertext.")
+	}
+
+	// Generate shares
+	shares := decryptShare(cipherTexts, prvkeys)
+
+	// Put a wrong share
+	shares[2][0].pg1 = RandPG1()
+
+	// Decrypt
+	results, err := Decrypt(cipherTexts, shares, pubkey, threshold, dkg.GetScaler())
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	if !bls.NewG1().Equal(msg[0], results[0]) {
+		t.Fatalf("decryption failed.")
+	}
+}
+
+func TestReshareTPKENew(t *testing.T) {
+	size := 7
+	threshold := 5
+	dkg := NewDKG(size, threshold)
+	dkg.Prepare()
+	if err := dkg.Verify(false); err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	dkg.Reshare()
+	if err := dkg.Verify(true); err != nil {
+		t.Fatalf(err.Error())
+	}
+	pubkey := dkg.PublishGlobalPublicKey()
+	prvkeys := dkg.GetPrivateKeysFromDKG()
+
+	// Encrypt with new key
+	msg := make([]*bls.PointG1, 1)
+	msg[0] = RandPG1()
+	cipherTexts := Encrypt(msg, pubkey)
+	cipherTexts[0].fromLastRound = false
 
 	// Verify ciphertext
 	if err := cipherTexts[0].Verify(); err != nil {

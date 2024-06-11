@@ -10,9 +10,10 @@ import (
 var fpByteSize = 48
 
 type CipherText struct {
-	cMsg       *bls.PointG1
-	bigR       *bls.PointG1
-	commitment *bls.PointG2
+	cMsg          *bls.PointG1
+	bigR          *bls.PointG1
+	commitment    *bls.PointG2
+	fromLastRound bool
 }
 
 func (ct *CipherText) ToBytes() []byte {
@@ -180,6 +181,7 @@ func tryDecrypt(cts []*CipherText, matrix [][]int, shares [][]*DecryptionShare, 
 				g1.Neg(minor, minor)
 			}
 			g1.Add(rpk, rpk, minor)
+			//g1.Add(rpk, rpk, g1.MulScalar(g1.Zero(), shares[j][i].bias, bls.NewFr().FromBytes(big.NewInt(int64(scaler)).Bytes())))
 		}
 		// Divide -d1 by d
 		g1.MulScalar(rpk, rpk, denominator)

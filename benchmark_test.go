@@ -17,11 +17,11 @@ func TestBenchmark(t *testing.T) {
 	t1 := time.Now()
 	dkg := NewDKG(size, threshold)
 	dkg.Prepare()
-	if err := dkg.Verify(); err != nil {
+	if err := dkg.Verify(false); err != nil {
 		t.Fatalf(err.Error())
 	}
 	pubkey := dkg.PublishGlobalPublicKey()
-	prvkeys := dkg.GetPrivateKeys()
+	prvkeys := dkg.GetPrivateKeysFromDKG()
 	t.Logf("dkg time: %v", time.Since(t1))
 
 	// Build a 1MB script

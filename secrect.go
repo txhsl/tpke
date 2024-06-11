@@ -1,22 +1,42 @@
 package tpke
 
-import bls "github.com/kilic/bls12-381"
+import (
+	"math/rand"
+	"time"
+
+	bls "github.com/kilic/bls12-381"
+)
 
 type Secret struct {
-	poly Poly
+	poly  *Poly
+	delta *bls.Fr
 }
 
 func RandomSecret(threshold int) *Secret {
-	randomPoly := randomPoly(threshold)
 	return &Secret{
-		poly: *randomPoly,
+		poly:  randomPoly(threshold),
+		delta: bls.NewFr().Zero(),
 	}
 }
 
-func (s *Secret) Commitment() *SecretCommitment {
-	return &SecretCommitment{
-		commitment: s.poly.commitment(),
+func (s *Secret) BiasDelta() {
+	// generate a random bias
+	source := rand.NewSource(time.Now().UnixNano())
+	random := rand.New(source)
+	delta, _ := bls.NewFr().Rand(random)
+
+	// add bias to a1..an-1 expect a0
+	for i := range s.poly.coeff {
+		if i == 0 {
+			continue
+		}
+		s.poly.coeff[i].Add(s.poly.coeff[i], delta)
 	}
+	s.delta = delta
+}
+
+func (s *Secret) Commitment() *Commitment {
+	return s.poly.commitment()
 }
 
 func (s *Secret) Evaluate(x bls.Fr) *bls.Fr {
@@ -34,26 +54,5 @@ func (s *Secret) Equals(other *Secret) bool {
 		}
 	}
 
-	return true
-}
-
-type SecretCommitment struct {
-	commitment *Commitment
-}
-
-func (sc *SecretCommitment) Evaluate(x bls.Fr) *bls.PointG1 {
-	return sc.commitment.evaluate(x)
-}
-
-func (sc *SecretCommitment) Equals(other *SecretCommitment) bool {
-	if len(sc.commitment.coeff) != len(other.commitment.coeff) {
-		return false
-	}
-	g1 := bls.NewG1()
-	for i := range sc.commitment.coeff {
-		if !g1.Equal(sc.commitment.coeff[i], other.commitment.coeff[i]) {
-			return false
-		}
-	}
 	return true
 }

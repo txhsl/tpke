@@ -12,12 +12,12 @@ type PublicKey struct {
 	pg1 *bls.PointG1
 }
 
-func NewGlobalPublicKey(scs []*SecretCommitment, scaler int) *PublicKey {
+func NewGlobalPublicKey(cs []*Commitment, scaler int) *PublicKey {
 	g1 := bls.NewG1()
-	pg1 := g1.New().Set(scs[0].commitment.coeff[0])
+	pg1 := g1.New().Set(cs[0].coeff[0])
 	// Add up A0
-	for i := 1; i < len(scs); i++ {
-		g1.Add(pg1, pg1, scs[i].commitment.coeff[0])
+	for i := 1; i < len(cs); i++ {
+		g1.Add(pg1, pg1, cs[i].coeff[0])
 	}
 	g1.MulScalar(pg1, pg1, bls.NewFr().FromBytes(big.NewInt(int64(scaler)).Bytes()))
 	return &PublicKey{
