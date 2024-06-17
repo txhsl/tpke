@@ -189,7 +189,7 @@ func (p *Participant) GenerateSecret(threshold int) {
 }
 
 func (p *Participant) RenovateSecret() {
-	p.secret.BiasDelta()
+	p.secret.Renovate()
 }
 
 func (p *Participant) GenerateShares(size int) []*bls.Fr {

@@ -2,8 +2,6 @@ package tpke
 
 import (
 	"math/big"
-	"math/rand"
-	"time"
 
 	bls "github.com/kilic/bls12-381"
 )
@@ -26,9 +24,7 @@ func NewGlobalPublicKey(cs []*Commitment, scaler int) *PublicKey {
 }
 
 func (pk *PublicKey) Encrypt(msg *bls.PointG1) *CipherText {
-	s1 := rand.NewSource(time.Now().UnixNano())
-	r1 := rand.New(s1)
-	r, _ := bls.NewFr().Rand(r1)
+	r := RandScalar()
 
 	// C=M+rpk, R1=rG1, R2=rG2
 	g1 := bls.NewG1()

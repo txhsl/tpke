@@ -1,9 +1,6 @@
 package tpke
 
 import (
-	"math/rand"
-	"time"
-
 	bls "github.com/kilic/bls12-381"
 )
 
@@ -19,20 +16,14 @@ func RandomSecret(threshold int) *Secret {
 	}
 }
 
-func (s *Secret) BiasDelta() {
-	// generate a random bias
-	source := rand.NewSource(time.Now().UnixNano())
-	random := rand.New(source)
-	delta, _ := bls.NewFr().Rand(random)
-
+func (s *Secret) Renovate() {
 	// add bias to a1..an-1 expect a0
 	for i := range s.poly.coeff {
 		if i == 0 {
 			continue
 		}
-		s.poly.coeff[i].Add(s.poly.coeff[i], delta)
+		s.poly.coeff[i].Set(RandScalar())
 	}
-	s.delta = delta
 }
 
 func (s *Secret) Commitment() *Commitment {

@@ -11,7 +11,6 @@ type PVSS struct {
 	r1         *bls.PointG1
 	r2         *bls.PointG2
 	bigf       []*bls.PointG1
-	delta      *bls.PointG1
 }
 
 func GenerateSharedSecrets(r *bls.Fr, size int, secret *Secret) (*PVSS, []*bls.Fr) {
@@ -19,10 +18,8 @@ func GenerateSharedSecrets(r *bls.Fr, size int, secret *Secret) (*PVSS, []*bls.F
 	g2 := bls.NewG2()
 	r1 := g1.New()
 	r2 := g2.New()
-	delta := g1.New()
 	g1.MulScalar(r1, &bls.G1One, r)
 	g2.MulScalar(r2, &bls.G2One, r)
-	g1.MulScalar(delta, &bls.G1One, secret.delta)
 	f := make([]*bls.Fr, size)
 	bigf := make([]*bls.PointG1, size)
 	for i := 0; i < size; i++ {
@@ -38,7 +35,6 @@ func GenerateSharedSecrets(r *bls.Fr, size int, secret *Secret) (*PVSS, []*bls.F
 		r1:         r1,
 		r2:         r2,
 		bigf:       bigf,
-		delta:      delta,
 	}, f
 }
 
@@ -70,16 +66,5 @@ func (pvss *PVSS) VerifyRenovate(op *PVSS) bool {
 		return false
 	}
 	g1 := bls.NewG1()
-	for i := range pvss.commitment.coeff {
-		if i == 0 {
-			if !g1.Equal(pvss.commitment.coeff[i], op.commitment.coeff[i]) {
-				return false
-			}
-		} else {
-			if !g1.Equal(pvss.commitment.coeff[i], g1.Add(g1.Zero(), op.commitment.coeff[i], pvss.delta)) {
-				return false
-			}
-		}
-	}
-	return true
+	return g1.Equal(pvss.commitment.coeff[0], op.commitment.coeff[0])
 }
