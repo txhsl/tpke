@@ -5,14 +5,12 @@ import (
 )
 
 type Secret struct {
-	poly  *Poly
-	delta *bls.Fr
+	poly *Poly
 }
 
 func RandomSecret(threshold int) *Secret {
 	return &Secret{
-		poly:  randomPoly(threshold),
-		delta: bls.NewFr().Zero(),
+		poly: randomPoly(threshold),
 	}
 }
 
