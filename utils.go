@@ -6,6 +6,96 @@ import (
 	"math"
 )
 
+func polyRecover(xs []int, ys []int) []int {
+	if len(xs) != len(ys) {
+		panic("array length mismatch")
+	}
+	// Compute lagrange
+	length := len(ys)
+	ns := make([][]int, length)
+	ds := make([]int, length)
+	for i := 0; i < length; i++ {
+		ns[i], ds[i] = lagrange(xs[i], length)
+	}
+	bigR := 1
+	for i := 0; i < length; i++ {
+		bigR *= ds[i]
+	}
+	for i := 0; i < length; i++ {
+		div := bigR / ds[i]
+		for j := 0; j < len(ns[i]); j++ {
+			ns[i][j] *= div
+		}
+		ds[i] = bigR
+	}
+
+	// Recover polynomial
+	t := make([]int, 0)
+	for i := 0; i < length; i++ {
+		poly := make([]int, len(ns[i]))
+		for j := 0; j < len(ns[i]); j++ {
+			poly[j] = ns[i][j] * ys[i]
+		}
+		t = polyAdd(t, poly)
+	}
+	for i := 0; i < len(t); i++ {
+		t[i] /= bigR
+	}
+	return t
+}
+
+func lagrange(x int, n int) ([]int, int) {
+	numerator := []int{1}
+	for i := 0; i < n; i++ {
+		if x == i {
+			continue
+		}
+		numerator = polyMul(numerator, []int{-i, 1})
+	}
+	denominator := 1
+	for i := 0; i < n; i++ {
+		if x == i {
+			continue
+		}
+		denominator *= x - i
+	}
+	return numerator, denominator
+}
+
+// (a0+a1x+a2x^2)*(b0+b1x+b2x^2)
+func polyMul(p1 []int, p2 []int) []int {
+	r := make([]int, len(p1)+len(p2)-1)
+	for i := 0; i < len(p1); i++ {
+		for j := 0; j < len(p2); j++ {
+			r[i+j] += p1[i] * p2[j]
+		}
+	}
+	return r
+}
+
+// (a0+a1x+a2x^2)+(b0+b1x+b2x^2)
+func polyAdd(p1 []int, p2 []int) []int {
+	if len(p1) > len(p2) {
+		r := make([]int, len(p1))
+		for i := 0; i < len(p2); i++ {
+			r[i] = p1[i] + p2[i]
+		}
+		for i := len(p2); i < len(p1); i++ {
+			r[i] = p1[i]
+		}
+		return r
+	} else {
+		r := make([]int, len(p2))
+		for i := 0; i < len(p1); i++ {
+			r[i] = p1[i] + p2[i]
+		}
+		for i := len(p1); i < len(p2); i++ {
+			r[i] = p2[i]
+		}
+		return r
+	}
+}
+
 func feldman(matrix [][]int) (int, []int) {
 	// Compute D, D1
 	d, coeff := determinant(matrix, len(matrix))
