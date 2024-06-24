@@ -1,8 +1,16 @@
 package tpke
 
 import (
+	"math/big"
 	"testing"
 )
+
+func TestRecover(t *testing.T) {
+	p := polyRecover([]int{1, 2, 3, 4, 5}, []*big.Int{big.NewInt(3), big.NewInt(7), big.NewInt(13), big.NewInt(21), big.NewInt(31)})
+	if p[0].Int64() != 1 || p[1].Int64() != 1 || p[2].Int64() != 1 || p[3].Int64() != 0 || p[4].Int64() != 0 {
+		t.Fatalf("recover failed. %v", p)
+	}
+}
 
 func TestDeterminant(t *testing.T) {
 	matrix := [][]int{{7, 8, 9, 4, 3}, {4, 9, 7, 0, 0}, {3, 6, 1, 0, 0}, {0, 5, 6, 0, 0}, {0, 6, 8, 0, 0}}

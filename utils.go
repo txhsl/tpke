@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"math/big"
 )
 
-func polyRecover(xs []int, ys []int) []int {
+func polyRecover(xs []int, ys []*big.Int) []*big.Int {
 	if len(xs) != len(ys) {
 		panic("array length mismatch")
 	}
@@ -15,7 +16,7 @@ func polyRecover(xs []int, ys []int) []int {
 	ns := make([][]int, length)
 	ds := make([]int, length)
 	for i := 0; i < length; i++ {
-		ns[i], ds[i] = lagrange(xs[i], length)
+		ns[i], ds[i] = lagrange(xs, i)
 	}
 	bigR := 1
 	for i := 0; i < length; i++ {
@@ -30,34 +31,34 @@ func polyRecover(xs []int, ys []int) []int {
 	}
 
 	// Recover polynomial
-	t := make([]int, 0)
+	t := make([]*big.Int, 0)
 	for i := 0; i < length; i++ {
-		poly := make([]int, len(ns[i]))
+		poly := make([]*big.Int, len(ns[i]))
 		for j := 0; j < len(ns[i]); j++ {
-			poly[j] = ns[i][j] * ys[i]
+			poly[j] = new(big.Int).Mul(big.NewInt(int64(ns[i][j])), ys[i])
 		}
 		t = polyAdd(t, poly)
 	}
 	for i := 0; i < len(t); i++ {
-		t[i] /= bigR
+		t[i] = new(big.Int).Div(t[i], big.NewInt(int64(bigR)))
 	}
 	return t
 }
 
-func lagrange(x int, n int) ([]int, int) {
+func lagrange(xs []int, n int) ([]int, int) {
 	numerator := []int{1}
-	for i := 0; i < n; i++ {
-		if x == i {
+	for i := 0; i < len(xs); i++ {
+		if n == i {
 			continue
 		}
-		numerator = polyMul(numerator, []int{-i, 1})
+		numerator = polyMul(numerator, []int{-xs[i], 1})
 	}
 	denominator := 1
-	for i := 0; i < n; i++ {
-		if x == i {
+	for i := 0; i < len(xs); i++ {
+		if n == i {
 			continue
 		}
-		denominator *= x - i
+		denominator *= xs[n] - xs[i]
 	}
 	return numerator, denominator
 }
@@ -74,23 +75,23 @@ func polyMul(p1 []int, p2 []int) []int {
 }
 
 // (a0+a1x+a2x^2)+(b0+b1x+b2x^2)
-func polyAdd(p1 []int, p2 []int) []int {
+func polyAdd(p1 []*big.Int, p2 []*big.Int) []*big.Int {
 	if len(p1) > len(p2) {
-		r := make([]int, len(p1))
+		r := make([]*big.Int, len(p1))
 		for i := 0; i < len(p2); i++ {
-			r[i] = p1[i] + p2[i]
+			r[i] = new(big.Int).Add(p1[i], p2[i])
 		}
 		for i := len(p2); i < len(p1); i++ {
-			r[i] = p1[i]
+			r[i] = new(big.Int).Set(p1[i])
 		}
 		return r
 	} else {
-		r := make([]int, len(p2))
+		r := make([]*big.Int, len(p2))
 		for i := 0; i < len(p1); i++ {
-			r[i] = p1[i] + p2[i]
+			r[i] = new(big.Int).Add(p1[i], p2[i])
 		}
 		for i := len(p1); i < len(p2); i++ {
-			r[i] = p2[i]
+			r[i] = new(big.Int).Set(p2[i])
 		}
 		return r
 	}
