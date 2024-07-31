@@ -75,7 +75,7 @@ func doMPCSetUp(ccs constraint.ConstraintSystem) (pk groth16.ProvingKey, vk grot
 	const (
 		nContributionsPhase1 = 3
 		nContributionsPhase2 = 3
-		power                = 9 //2^9 元素个数
+		power                = 18 //2^9 元素个数
 	)
 
 	srs1 := mpcsetup.InitPhase1(power)
@@ -155,16 +155,18 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 		return
 	}
 
-	_, R := secp256k1.Generators()
-	R.ScalarMultiplicationBase(r)
+	_, g := secp256k1.Generators()
+	R := g.ScalarMultiplicationBase(big.NewInt(5))
 
 	_, CPoint := secp256k1.Generators()
 	temp := publicKey.A.ScalarMultiplicationBase(r)
 	CPoint.Add(&keyPoint, temp)
 	//C=M+rpk, R1=rG1
 
-	var ecdsaEC ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]
-	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &ecdsaEC)
+	exx := ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
+
+	//var ecdsaEC ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]
+	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &exx)
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
@@ -177,19 +179,48 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 	}
 
 	//提供输入输出
+	/*	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+		PublicKey_X:  emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X),
+		PublicKey_Y:  emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y),
+		CipherText_X: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.X),
+		CipherText_Y: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.Y),
+		R_X:          emulated.ValueOf[emulated.Secp256k1Fp](R.X),
+		R_Y:          emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
+
+		KeyPoint_X: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.X),
+		KeyPoint_Y: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.Y),
+
+		r: emulated.ValueOf[emulated.Secp256k1Fr](r),
+	}*/
 	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
-		PublicKey_X:  publicKey.A.X,
-		PublicKey_Y:  publicKey.A.Y,
-		CipherText_X: CPoint.X,
-		CipherText_Y: CPoint.Y,
-		//R_X:          R.X,
-		//R_Y:          R.Y,
 
-		KeyPoint_X: keyPoint.X,
-		KeyPoint_Y: keyPoint.Y,
-
-		//r: emulated.ValueOf[emulated.Secp256k1Fr](r),
+		PublicKey: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y),
+		},
+		CipherText: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.Y),
+		},
+		R: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](R.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
+		},
+		KeyPoint: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.Y),
+		},
+		/*		r: emulated.ValueOf[emulated.Secp256k1Fr](r),*/
 	}
+	/*	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+
+		PublicKey:  sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y)},
+		CipherText: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.Y)},
+		R:          sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](R.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y)},
+		KeyPoint:   sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.Y)},
+
+		r: emulated.ValueOf[emulated.Secp256k1Fr](r),
+	}*/
 	//计算witness
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
 	if err != nil {
@@ -213,73 +244,44 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 
 }
 
+func encrypt[B, S emulated.FieldParams](api frontend.API, params sw_emulated.CurveParams, r emulated.Element[S], keyPoint sw_emulated.AffinePoint[B], ciptext sw_emulated.AffinePoint[B], PublicKey sw_emulated.AffinePoint[B], R sw_emulated.AffinePoint[B]) {
+	curve, err := sw_emulated.New[B, S](api, params)
+	if err != nil {
+		panic("initalize new curve")
+	}
+
+	G := curve.Generator()
+	rg := curve.ScalarMul(G, &r)               // r*G
+	rPk := curve.ScalarMul(&PublicKey, &r)     // r*PublicKey
+	result := curve.AddUnified(rPk, &keyPoint) //keyPoint+r*PublicKey
+	api.Println("rPk.x", rPk.X)
+	api.Println("rPk.y", rPk.Y)
+	api.Println("result.x", result.X)
+	api.Println("result.y", result.Y)
+	curve.AssertIsEqual(result, &ciptext)
+	curve.AssertIsEqual(rg, &R)
+}
+
 type ECDSAEncryptionCircuit[Base, Scalar emulated.FieldParams] struct {
-	PublicKey_X frontend.Variable `gnark:",public"`
-	PublicKey_Y frontend.Variable `gnark:",public"`
+	PublicKey  sw_emulated.AffinePoint[Base] `gnark:",public"`
+	CipherText sw_emulated.AffinePoint[Base] `gnark:",public"`
+	R          sw_emulated.AffinePoint[Base] `gnark:",public"`
+	KeyPoint   sw_emulated.AffinePoint[Base] `gnark:",public"`
 
-	CipherText_X frontend.Variable `gnark:",public"`
-	CipherText_Y frontend.Variable `gnark:",public"`
-
-	//R_X frontend.Variable `gnark:",public"`
-	//R_Y frontend.Variable `gnark:",public"`
-
-	KeyPoint_X frontend.Variable
-	KeyPoint_Y frontend.Variable
-
-	//r emulated.Element[Scalar]
+	/*	r emulated.Element[Scalar]*/
 }
 
-func (circuit *ECDSAEncryptionCircuit[Base, Scalar]) Define(api frontend.API) error {
-
-	PublicKey := sw_emulated.AffinePoint[Base]{X: emulated.ValueOf[Base](circuit.PublicKey_X), Y: emulated.ValueOf[Base](circuit.PublicKey_Y)}
-	CipherText := sw_emulated.AffinePoint[Base]{X: emulated.ValueOf[Base](circuit.CipherText_X), Y: emulated.ValueOf[Base](circuit.CipherText_Y)}
-	//R := sw_emulated.AffinePoint[Base]{X: emulated.ValueOf[Base](circuit.R_X), Y: emulated.ValueOf[Base](circuit.R_Y)}
-	KeyPoint := sw_emulated.AffinePoint[Base]{X: emulated.ValueOf[Base](circuit.KeyPoint_X), Y: emulated.ValueOf[Base](circuit.KeyPoint_Y)}
-
-	/*	CipherText CipherText[Base] `gnark:",public"`
-		R          R[Base]          `gnark:",public"`
-		KeyPoint   KeyPoint[Base]
-		r          big.Int*/
-
-	//encrypt[Base, Scalar](api, sw_emulated.GetCurveParams[Base](), circuit.r, KeyPoint, CipherText, PublicKey)
-	cr, err := sw_emulated.New[Base, Scalar](api, sw_emulated.GetCurveParams[Base]())
-	if err != nil {
-		// TODO: softer handling.
-		panic(err)
-	}
-	cr.AssertIsEqual(&PublicKey, &CipherText)
-	cr.AssertIsEqual(&KeyPoint, &KeyPoint)
-	cr.AssertIsEqual(&CipherText, &CipherText)
+func (c *ECDSAEncryptionCircuit[B, S]) Define(api frontend.API) error {
+	api.Println("PublicKey.X", c.PublicKey.X)
+	api.Println("PublicKey.Y", c.PublicKey.Y)
+	api.Println("CipherText.X", c.CipherText.X)
+	api.Println("CipherText.Y", c.CipherText.Y)
+	api.Println("R.X", c.R.X)
+	api.Println("R.Y", c.R.Y)
+	api.Println("KeyPoint.X", c.KeyPoint.X)
+	api.Println("KeyPoint.Y", c.KeyPoint.Y)
+	r := emulated.ValueOf[S](5)
+	params := sw_emulated.GetCurveParams[emulated.Secp256k1Fp]()
+	encrypt(api, params, r, c.KeyPoint, c.CipherText, c.PublicKey, c.R)
 	return nil
-}
-
-/*
-type PublicKey[Base emulated.FieldParams] sw_emulated.AffinePoint[Base]
-
-type CipherText[Base emulated.FieldParams] sw_emulated.AffinePoint[Base]
-
-type KeyPoint[Base emulated.FieldParams] sw_emulated.AffinePoint[Base]
-
-type R[Base emulated.FieldParams] sw_emulated.AffinePoint[Base]
-*/
-func encrypt[T, S emulated.FieldParams](api frontend.API, params sw_emulated.CurveParams, r emulated.Element[S], keyPoint sw_emulated.AffinePoint[T], ciptext sw_emulated.AffinePoint[T], PublicKey sw_emulated.AffinePoint[T]) {
-	cr, err := sw_emulated.New[T, S](api, params)
-	if err != nil {
-		// TODO: softer handling.
-		panic(err)
-	}
-	/*	scalarApi, err := emulated.NewField[S](api)
-		if err != nil {
-			panic(err)
-		}
-		baseApi, err := emulated.NewField[T](api)
-		if err != nil {
-			panic(err)
-		}*/
-	mul := cr.ScalarMul(&PublicKey, &r)
-
-	result := cr.AddUnified(mul, &keyPoint)
-
-	cptt := sw_emulated.AffinePoint[T](ciptext)
-	cr.AssertIsEqual(result, &cptt)
 }
