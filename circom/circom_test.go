@@ -1,11 +1,15 @@
 package circom
 
 import (
+	"bytes"
 	"crypto/rand"
+	"encoding/json"
+	"fmt"
 	"github.com/consensys/gnark-crypto/ecc"
 	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1/ecdsa"
+	"github.com/consensys/gnark-crypto/ecc/secp256k1/fr"
 	groth16 "github.com/consensys/gnark/backend/groth16/bn254"
 	"github.com/consensys/gnark/backend/groth16/bn254/mpcsetup"
 	"github.com/consensys/gnark/constraint"
@@ -19,20 +23,18 @@ import (
 )
 
 // test circom
-type MyCircuit struct {
-	X frontend.Variable `gnark:",public"`
-	Y frontend.Variable `gnark:",public"`
+type MyCircuit[S emulated.FieldParams] struct {
+	X emulated.Element[S] `gnark:",public"`
 }
 
-func (circuit *MyCircuit) Define(api frontend.API) error {
-	x3 := api.Mul(circuit.X, circuit.X, circuit.X)
-	api.AssertIsEqual(circuit.Y, api.Add(x3, circuit.X, 5))
+func (circuit *MyCircuit[S]) Define(api frontend.API) error {
+	api.Println("result.y", circuit.X)
 	return nil
 }
 
 func TestCircom(t *testing.T) {
 	//编译电路
-	var myCircuit MyCircuit
+	var myCircuit MyCircuit[emulated.Secp256k1Fr]
 	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &myCircuit)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -44,10 +46,11 @@ func TestCircom(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
+	var r fr.Element
+	r.SetRandom()
 	//提供输入输出
-	assignment := &MyCircuit{
-		X: 3,
-		Y: 35,
+	assignment := &MyCircuit[emulated.Secp256k1Fr]{
+		X: emulated.ValueOf[emulated.Secp256k1Fr](r),
 	}
 	//计算witness
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
@@ -149,23 +152,31 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 	_, keyPoint := secp256k1.Generators()
 
 	//C=M+rpk, R1=rG1
-	max := new(big.Int).Lsh(big.NewInt(1), 128)
-	r, err := rand.Int(rand.Reader, max)
-	if err != nil {
-		return
-	}
+	var r fr.Element
+	r.SetRandom()
+	var r_int = big.Int{}
 
+	r.BigInt(&r_int)
+
+	/*	//max := new(big.Int).Lsh(big.NewInt(1), 128)
+		r := new(big.Int).SetUint64(uint64(5))
+		/*	r, err := rand.Int(rand.Reader, max)
+			if err != nil {
+				return
+			}
+	*/
 	_, g := secp256k1.Generators()
-	R := g.ScalarMultiplicationBase(big.NewInt(5))
+	var R secp256k1.G1Affine
+	R.ScalarMultiplication(&g, &r_int)
 
-	_, CPoint := secp256k1.Generators()
-	temp := publicKey.A.ScalarMultiplicationBase(r)
-	CPoint.Add(&keyPoint, temp)
+	var CPoint secp256k1.G1Affine
+	var temp secp256k1.G1Affine
+	temp.ScalarMultiplication(&publicKey.A, &r_int)
+	CPoint.Add(&keyPoint, &temp)
 	//C=M+rpk, R1=rG1
 
 	exx := ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
 
-	//var ecdsaEC ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]
 	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &exx)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -179,19 +190,6 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 	}
 
 	//提供输入输出
-	/*	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
-		PublicKey_X:  emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X),
-		PublicKey_Y:  emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y),
-		CipherText_X: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.X),
-		CipherText_Y: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.Y),
-		R_X:          emulated.ValueOf[emulated.Secp256k1Fp](R.X),
-		R_Y:          emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
-
-		KeyPoint_X: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.X),
-		KeyPoint_Y: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.Y),
-
-		r: emulated.ValueOf[emulated.Secp256k1Fr](r),
-	}*/
 	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
 
 		PublicKey: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
@@ -210,17 +208,8 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 			X: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.X),
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.Y),
 		},
-		/*		r: emulated.ValueOf[emulated.Secp256k1Fr](r),*/
-	}
-	/*	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
-
-		PublicKey:  sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y)},
-		CipherText: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.Y)},
-		R:          sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](R.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y)},
-		KeyPoint:   sw_emulated.AffinePoint[emulated.Secp256k1Fp]{X: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.X), Y: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.Y)},
-
 		r: emulated.ValueOf[emulated.Secp256k1Fr](r),
-	}*/
+	}
 	//计算witness
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
 	if err != nil {
@@ -230,6 +219,11 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
+	schema, _ := frontend.NewSchema(assignment)
+	ret, _ := publicWitness.ToJSON(schema)
+	var b bytes.Buffer
+	json.Indent(&b, ret, "", "\t")
+	fmt.Println(b.String())
 	// 计算证明
 	proof, err := groth16.Prove(css.(*cs.R1CS), &pk, witness)
 	if err != nil {
@@ -268,7 +262,7 @@ type ECDSAEncryptionCircuit[Base, Scalar emulated.FieldParams] struct {
 	R          sw_emulated.AffinePoint[Base] `gnark:",public"`
 	KeyPoint   sw_emulated.AffinePoint[Base] `gnark:",public"`
 
-	/*	r emulated.Element[Scalar]*/
+	r emulated.Element[Scalar]
 }
 
 func (c *ECDSAEncryptionCircuit[B, S]) Define(api frontend.API) error {
@@ -280,8 +274,8 @@ func (c *ECDSAEncryptionCircuit[B, S]) Define(api frontend.API) error {
 	api.Println("R.Y", c.R.Y)
 	api.Println("KeyPoint.X", c.KeyPoint.X)
 	api.Println("KeyPoint.Y", c.KeyPoint.Y)
-	r := emulated.ValueOf[S](5)
+
 	params := sw_emulated.GetCurveParams[emulated.Secp256k1Fp]()
-	encrypt(api, params, r, c.KeyPoint, c.CipherText, c.PublicKey, c.R)
+	encrypt(api, params, c.r, c.KeyPoint, c.CipherText, c.PublicKey, c.R)
 	return nil
 }
