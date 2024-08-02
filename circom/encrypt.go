@@ -42,7 +42,7 @@ func (pk PublicKey[T, S]) VerifyEncrypt(api frontend.API, params sw_emulated.Cur
 
 	cx := baseApi.Reduce(&bigC.X)
 	cxBits := baseApi.ToBits(cx)
-	cbits := baseApi.ToBits(&cipher.R.X)
+	cbits := baseApi.ToBits(&cipher.C.X)
 	if len(cbits) != len(cxBits) {
 		panic("non-equal lengths")
 	}
