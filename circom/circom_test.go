@@ -1,14 +1,11 @@
 package circom
 
 import (
-	"bytes"
-	"crypto/rand"
-	"encoding/json"
-	"fmt"
 	"github.com/consensys/gnark-crypto/ecc"
+	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1"
-	"github.com/consensys/gnark-crypto/ecc/secp256k1/ecdsa"
+	"github.com/consensys/gnark-crypto/ecc/secp256k1/fp"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1/fr"
 	groth16 "github.com/consensys/gnark/backend/groth16/bn254"
 	"github.com/consensys/gnark/backend/groth16/bn254/mpcsetup"
@@ -18,8 +15,13 @@ import (
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
 	"github.com/consensys/gnark/std/math/emulated"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/ecies"
+	bls "github.com/kilic/bls12-381"
 	"math/big"
+	"math/rand"
 	"testing"
+	"time"
 )
 
 // test circom
@@ -78,7 +80,7 @@ func doMPCSetUp(ccs constraint.ConstraintSystem) (pk groth16.ProvingKey, vk grot
 	const (
 		nContributionsPhase1 = 3
 		nContributionsPhase2 = 3
-		power                = 18 //2^9 元素个数
+		power                = 19 //2^9 元素个数
 	)
 
 	srs1 := mpcsetup.InitPhase1(power)
@@ -146,36 +148,47 @@ func Phase2clone(phase2 mpcsetup.Phase2) mpcsetup.Phase2 {
 
 func TestEcdsaEncryptionCircuit(t *testing.T) {
 	// generate parameters
-	privKey, _ := ecdsa.GenerateKey(rand.Reader)
+	source := rand.NewSource(time.Now().UnixNano())
+	random := rand.New(source)
+	privKey, err := ecies.GenerateKey(random, crypto.S256(), nil)
+	if err != nil {
+		return
+	}
 	publicKey := privKey.PublicKey
 
-	_, keyPoint := secp256k1.Generators()
-
+	Pubkey := secp256k1.G1Affine{
+		fp.Element(fr.NewElement(publicKey.X.Uint64())),
+		fp.Element(fr.NewElement(publicKey.Y.Uint64())),
+	}
+	t.Logf("create pk ok ")
+	fi, _ := bls.NewFr().Rand(random)
+	t.Logf("create fi ok ")
+	//fi as x to get y,to build keypoint
+	head := []byte{0x03}
+	res := append(head, fi.ToBytes()...)
+	keyPoint, err := crypto.DecompressPubkey(res)
+	KeyPoint := secp256k1.G1Affine{
+		fp.Element(fr.NewElement(keyPoint.X.Uint64())),
+		fp.Element(fr.NewElement(keyPoint.Y.Uint64())),
+	}
+	t.Logf("create keypoint ok ")
+	//F(i)=f(i)G
+	_, _, bls_g1, _ := bls12381.Generators()
+	var Fi bls12381.G1Affine
+	Fi.ScalarMultiplication(&bls_g1, fi.ToBig())
+	t.Logf("create Fi ok ")
 	//C=M+rpk, R1=rG1
-	var r fr.Element
-	r.SetRandom()
-	var r_int = big.Int{}
-
-	r.BigInt(&r_int)
-
-	/*	//max := new(big.Int).Lsh(big.NewInt(1), 128)
-		r := new(big.Int).SetUint64(uint64(5))
-		/*	r, err := rand.Int(rand.Reader, max)
-			if err != nil {
-				return
-			}
-	*/
-	_, g := secp256k1.Generators()
+	r := big.NewInt(int64(random.Uint64()))
+	_, g1 := secp256k1.Generators()
 	var R secp256k1.G1Affine
-	R.ScalarMultiplication(&g, &r_int)
-
+	R.ScalarMultiplication(&g1, r)
+	t.Logf("create R ok ")
 	var CPoint secp256k1.G1Affine
 	var temp secp256k1.G1Affine
-	temp.ScalarMultiplication(&publicKey.A, &r_int)
-	CPoint.Add(&keyPoint, &temp)
-	//C=M+rpk, R1=rG1
-
-	exx := ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
+	temp.ScalarMultiplication(&Pubkey, r)
+	CPoint.Add(&KeyPoint, &temp)
+	t.Logf("create Cpoint ok ")
+	exx := ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr, emulated.BLS12381Fp, emulated.BLS12381Fr]{}
 
 	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &exx)
 	if err != nil {
@@ -190,11 +203,11 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 	}
 
 	//提供输入输出
-	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+	assignment := &ECDSAEncryptionCircuit[emulated.Secp256k1Fp, emulated.Secp256k1Fr, emulated.BLS12381Fp, emulated.BLS12381Fr]{
 
 		PublicKey: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y),
+			X: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.Y),
 		},
 		CipherText: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
 			X: emulated.ValueOf[emulated.Secp256k1Fp](CPoint.X),
@@ -205,10 +218,17 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
 		},
 		KeyPoint: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.X),
+			X: emulated.ValueOf[emulated.Secp256k1Fp](fi.ToBig()),
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](keyPoint.Y),
 		},
-		r: emulated.ValueOf[emulated.Secp256k1Fr](r),
+		SmallR: frontend.Variable(r),
+
+		SmallFi: frontend.Variable(fi.ToBig()),
+
+		Fi: sw_emulated.AffinePoint[emulated.BLS12381Fp]{
+			X: emulated.ValueOf[emulated.BLS12381Fp](Fi.X),
+			Y: emulated.ValueOf[emulated.BLS12381Fp](Fi.Y),
+		},
 	}
 	//计算witness
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
@@ -219,11 +239,6 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	schema, _ := frontend.NewSchema(assignment)
-	ret, _ := publicWitness.ToJSON(schema)
-	var b bytes.Buffer
-	json.Indent(&b, ret, "", "\t")
-	fmt.Println(b.String())
 	// 计算证明
 	proof, err := groth16.Prove(css.(*cs.R1CS), &pk, witness)
 	if err != nil {
@@ -238,34 +253,54 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 
 }
 
-func encrypt[B, S emulated.FieldParams](api frontend.API, params sw_emulated.CurveParams, r emulated.Element[S], keyPoint sw_emulated.AffinePoint[B], ciptext sw_emulated.AffinePoint[B], PublicKey sw_emulated.AffinePoint[B], R sw_emulated.AffinePoint[B]) {
-	curve, err := sw_emulated.New[B, S](api, params)
+func encrypt[B1, S1 emulated.FieldParams](api frontend.API, params sw_emulated.CurveParams, KeyPoint sw_emulated.AffinePoint[B1], Ciptext sw_emulated.AffinePoint[B1], PublicKey sw_emulated.AffinePoint[B1], R sw_emulated.AffinePoint[B1], SmallR frontend.Variable, SmallFi frontend.Variable) {
+	curve, err := sw_emulated.New[B1, S1](api, params)
+	if err != nil {
+		panic("initalize new Secp256k1Fp curve fault")
+	}
+	//check point
+	curve.AssertIsOnCurve(&KeyPoint)
+	curve.AssertIsOnCurve(&Ciptext)
+	curve.AssertIsOnCurve(&PublicKey)
+	curve.AssertIsOnCurve(&R)
+
+	G := curve.Generator()
+	r := emulated.ValueOf[S1](SmallR)
+	rg := curve.ScalarMul(G, &r)               // r*G
+	rPk := curve.ScalarMul(&PublicKey, &r)     // r*PublicKey
+	result := curve.AddUnified(rPk, &KeyPoint) //KeyPoint+r*PublicKey
+	curve.AssertIsEqual(result, &Ciptext)
+	curve.AssertIsEqual(rg, &R)
+
+	api.AssertIsEqual(KeyPoint.X, emulated.ValueOf[S1](SmallFi))
+	//curve.AssertIsEqual(Fi.x, emulated.ValueOf[S1](smallFi))
+}
+
+func checkPairng[B2, S2 emulated.FieldParams](api frontend.API, params sw_emulated.CurveParams, fi emulated.Element[S2], Fi sw_emulated.AffinePoint[B2]) {
+	curve, err := sw_emulated.New[B2, S2](api, params)
 	if err != nil {
 		panic("initalize new curve")
 	}
-
+	curve.AssertIsOnCurve(&Fi)
 	G := curve.Generator()
-	rg := curve.ScalarMul(G, &r)               // r*G
-	rPk := curve.ScalarMul(&PublicKey, &r)     // r*PublicKey
-	result := curve.AddUnified(rPk, &keyPoint) //keyPoint+r*PublicKey
-	api.Println("rPk.x", rPk.X)
-	api.Println("rPk.y", rPk.Y)
-	api.Println("result.x", result.X)
-	api.Println("result.y", result.Y)
-	curve.AssertIsEqual(result, &ciptext)
-	curve.AssertIsEqual(rg, &R)
+	result := curve.ScalarMul(G, &fi) // fi*G
+	curve.AssertIsEqual(result, &Fi)
 }
 
-type ECDSAEncryptionCircuit[Base, Scalar emulated.FieldParams] struct {
-	PublicKey  sw_emulated.AffinePoint[Base] `gnark:",public"`
-	CipherText sw_emulated.AffinePoint[Base] `gnark:",public"`
-	R          sw_emulated.AffinePoint[Base] `gnark:",public"`
-	KeyPoint   sw_emulated.AffinePoint[Base] `gnark:",public"`
+type ECDSAEncryptionCircuit[Base1, Scalar1, Base2, Scalar2 emulated.FieldParams] struct {
+	PublicKey  sw_emulated.AffinePoint[Base1] `gnark:",public"`
+	CipherText sw_emulated.AffinePoint[Base1] `gnark:",public"`
+	R          sw_emulated.AffinePoint[Base1] `gnark:",public"`
+	KeyPoint   sw_emulated.AffinePoint[Base1] `gnark:",public"`
 
-	r emulated.Element[Scalar]
+	SmallR frontend.Variable
+
+	SmallFi frontend.Variable
+
+	Fi sw_emulated.AffinePoint[Base2] `gnark:",public"`
 }
 
-func (c *ECDSAEncryptionCircuit[B, S]) Define(api frontend.API) error {
+func (c *ECDSAEncryptionCircuit[Base1, Scalar1, Base2, Scalar2]) Define(api frontend.API) error {
 	api.Println("PublicKey.X", c.PublicKey.X)
 	api.Println("PublicKey.Y", c.PublicKey.Y)
 	api.Println("CipherText.X", c.CipherText.X)
@@ -274,8 +309,17 @@ func (c *ECDSAEncryptionCircuit[B, S]) Define(api frontend.API) error {
 	api.Println("R.Y", c.R.Y)
 	api.Println("KeyPoint.X", c.KeyPoint.X)
 	api.Println("KeyPoint.Y", c.KeyPoint.Y)
+	api.Println("Fi.X", c.Fi.X)
+	api.Println("Fi.Y", c.Fi.Y)
+	api.Println("SmallFi", c.SmallFi)
 
-	params := sw_emulated.GetCurveParams[emulated.Secp256k1Fp]()
-	encrypt(api, params, c.r, c.KeyPoint, c.CipherText, c.PublicKey, c.R)
+	params1 := sw_emulated.GetCurveParams[Base1]()
+	encrypt[Base1, Scalar1](api, params1, c.KeyPoint, c.CipherText, c.PublicKey, c.R, c.SmallR, c.SmallFi)
+
+	//params2 := sw_emulated.GetCurveParams[emulated.BLS12381Fp]()
+	/*	c.KeyPoint.X.
+		fr.Element.
+		c.KeyPoint.X.
+		checkPairng[Base2, Scalar1](api, params2, c.KeyPoint.X, c.Fi)*/
 	return nil
 }
