@@ -54,7 +54,7 @@ func (c *EccCircuit[T, S]) Define(api frontend.API) error {
 	return nil
 }
 
-func TestEcdsaEncryptionCircuit(t *testing.T) {
+func TestEcdsaEncryptionCircuit1(t *testing.T) {
 	privKey, _ := generateKey(rand.Reader)
 	publicKey := privKey.PublicKey
 
