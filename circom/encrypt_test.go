@@ -32,11 +32,6 @@ type PK struct {
 	A secp256k1.G1Affine
 }
 
-type SK struct {
-	PublicKey PK
-	scalar    [sizeFr]byte // secret scalar, in big Endian
-}
-
 type CT struct {
 	C secp256k1.G1Affine
 	R secp256k1.G1Affine
@@ -44,19 +39,18 @@ type CT struct {
 
 type EccCircuit[T, S emulated.FieldParams] struct {
 	Cpr CipherText[T]
-	Msg emulated.Element[S]
-	R   emulated.Element[S]
+	Msg frontend.Variable
+	R   frontend.Variable
 	Pub PublicKey[T, S]
 }
 
 func (c *EccCircuit[T, S]) Define(api frontend.API) error {
-	c.Pub.VerifyEncrypt(api, sw_emulated.GetCurveParams[T](), &c.Msg, &c.R, &c.Cpr)
+	c.Pub.VerifyEncrypt(api, sw_emulated.GetCurveParams[T](), c.Msg, c.R, &c.Cpr)
 	return nil
 }
 
 func TestEcdsaEncryptionCircuit(t *testing.T) {
-	privKey, _ := generateKey(rand.Reader)
-	publicKey := privKey.PublicKey
+	publicKey, _ := generateKey(rand.Reader)
 
 	msg, err := randFieldElement(rand.Reader)
 	if err != nil {
@@ -81,8 +75,8 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 				Y: emulated.ValueOf[emulated.Secp256k1Fp](cipher.R.Y),
 			},
 		},
-		Msg: emulated.ValueOf[emulated.Secp256k1Fr](msg),
-		R:   emulated.ValueOf[emulated.Secp256k1Fr](r),
+		Msg: *msg,
+		R:   *r,
 		Pub: PublicKey[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
 			X: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X),
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y),
@@ -94,7 +88,7 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 	assert.NoError(err)
 }
 
-func generateKey(rand io.Reader) (*SK, error) {
+func generateKey(rand io.Reader) (*PK, error) {
 	k, err := randFieldElement(rand)
 	if err != nil {
 		return nil, err
@@ -102,10 +96,11 @@ func generateKey(rand io.Reader) (*SK, error) {
 	}
 	_, g := secp256k1.Generators()
 
-	privateKey := new(SK)
-	k.FillBytes(privateKey.scalar[:sizeFr])
-	privateKey.PublicKey.A.ScalarMultiplication(&g, k)
-	return privateKey, nil
+	privateKey := make([]byte, sizeFr)
+	publicKey := new(PK)
+	k.FillBytes(privateKey[:sizeFr])
+	publicKey.A.ScalarMultiplication(&g, k)
+	return publicKey, nil
 }
 
 func randFieldElement(rand io.Reader) (k *big.Int, err error) {

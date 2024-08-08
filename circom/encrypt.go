@@ -12,7 +12,13 @@ type CipherText[Base emulated.FieldParams] struct {
 	C, R sw_emulated.AffinePoint[Base]
 }
 
-func (pk PublicKey[T, S]) VerifyEncrypt(api frontend.API, params sw_emulated.CurveParams, msg *emulated.Element[S], r *emulated.Element[S], cipher *CipherText[T]) {
+func (pk PublicKey[T, S]) VerifyEncrypt(
+	api frontend.API,
+	params sw_emulated.CurveParams,
+	msg frontend.Variable,
+	r frontend.Variable,
+	cipher *CipherText[T],
+) {
 	cr, err := sw_emulated.New[T, S](api, params)
 	if err != nil {
 		panic(err)
@@ -25,10 +31,14 @@ func (pk PublicKey[T, S]) VerifyEncrypt(api frontend.API, params sw_emulated.Cur
 	if err != nil {
 		panic(err)
 	}
+	// Convert bigint to scalar
+	scalarM := ToElement[S](api, msg)
+	scalarR := ToElement[S](api, r)
+
 	// C = M + rpk
 	pkpt := sw_emulated.AffinePoint[T](pk)
-	bigR := cr.ScalarMulBase(r)
-	bigC := cr.JointScalarMulBase(&pkpt, r, msg)
+	bigR := cr.ScalarMulBase(scalarR)
+	bigC := cr.JointScalarMulBase(&pkpt, scalarR, scalarM)
 
 	rx := baseApi.Reduce(&bigR.X)
 	rxBits := baseApi.ToBits(rx)
@@ -49,4 +59,13 @@ func (pk PublicKey[T, S]) VerifyEncrypt(api frontend.API, params sw_emulated.Cur
 	for i := range cbits {
 		api.AssertIsEqual(cbits[i], cxBits[i])
 	}
+}
+
+func ToElement[T emulated.FieldParams](api frontend.API, input frontend.Variable) *emulated.Element[T] {
+	f, err := emulated.NewField[T](api)
+	if err != nil {
+		panic(err)
+	}
+
+	return f.NewElement(input)
 }
