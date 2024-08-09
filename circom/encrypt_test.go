@@ -75,8 +75,8 @@ func TestEcdsaEncryptionCircuit(t *testing.T) {
 				Y: emulated.ValueOf[emulated.Secp256k1Fp](cipher.R.Y),
 			},
 		},
-		Msg: *msg,
-		R:   *r,
+		Msg: frontend.Variable(msg),
+		R:   frontend.Variable(r),
 		Pub: PublicKey[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
 			X: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.X),
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](publicKey.A.Y),

@@ -6,20 +6,20 @@ import (
 	"github.com/consensys/gnark/std/math/emulated"
 )
 
-type PublicKey[Base, Scalar emulated.FieldParams] sw_emulated.AffinePoint[Base]
+type PublicKey[Fp, Fr emulated.FieldParams] sw_emulated.AffinePoint[Fp]
 
-type CipherText[Base emulated.FieldParams] struct {
-	C, R sw_emulated.AffinePoint[Base]
+type CipherText[Fp emulated.FieldParams] struct {
+	C, R sw_emulated.AffinePoint[Fp]
 }
 
-func (pk PublicKey[T, S]) VerifyEncrypt(
+func (pk PublicKey[Fp, Fr]) VerifyEncrypt(
 	api frontend.API,
 	params sw_emulated.CurveParams,
 	msg frontend.Variable,
 	r frontend.Variable,
-	cipher *CipherText[T],
+	cipher *CipherText[Fp],
 ) {
-	cr, err := sw_emulated.New[T, S](api, params)
+	cr, err := sw_emulated.New[Fp, Fr](api, params)
 	if err != nil {
 		panic(err)
 	}
@@ -27,16 +27,16 @@ func (pk PublicKey[T, S]) VerifyEncrypt(
 	// if err != nil {
 	// 	panic(err)
 	// }
-	baseApi, err := emulated.NewField[T](api)
+	baseApi, err := emulated.NewField[Fp](api)
 	if err != nil {
 		panic(err)
 	}
 	// Convert bigint to scalar
-	scalarM := ToElement[S](api, msg)
-	scalarR := ToElement[S](api, r)
+	scalarM := ToFieldElement[Fr](api, msg)
+	scalarR := ToFieldElement[Fr](api, r)
 
 	// C = M + rpk
-	pkpt := sw_emulated.AffinePoint[T](pk)
+	pkpt := sw_emulated.AffinePoint[Fp](pk)
 	bigR := cr.ScalarMulBase(scalarR)
 	bigC := cr.JointScalarMulBase(&pkpt, scalarR, scalarM)
 
@@ -61,8 +61,8 @@ func (pk PublicKey[T, S]) VerifyEncrypt(
 	}
 }
 
-func ToElement[T emulated.FieldParams](api frontend.API, input frontend.Variable) *emulated.Element[T] {
-	f, err := emulated.NewField[T](api)
+func ToFieldElement[Fr emulated.FieldParams](api frontend.API, input frontend.Variable) *emulated.Element[Fr] {
+	f, err := emulated.NewField[Fr](api)
 	if err != nil {
 		panic(err)
 	}
