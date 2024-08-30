@@ -3,6 +3,7 @@ package circom
 import (
 	"fmt"
 	"github.com/consensys/gnark-crypto/ecc"
+	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1/fp"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1/fr"
@@ -11,6 +12,7 @@ import (
 	"github.com/consensys/gnark/constraint"
 	cs "github.com/consensys/gnark/constraint/bn254"
 	"github.com/consensys/gnark/frontend"
+	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
 	zksha3 "github.com/consensys/gnark/std/hash/sha3"
 	"github.com/consensys/gnark/std/math/emulated"
@@ -36,7 +38,7 @@ type TCircom[Base, Scalars emulated.FieldParams] struct {
 	In       []uints.U8
 	Expected []uints.U8
 
-	SmallR frontend.Variable
+	SmallR emulated.Element[Scalars]
 	BigR   sw_emulated.AffinePoint[Base]
 	Pub    sw_emulated.AffinePoint[Base]
 	RPub   sw_emulated.AffinePoint[Base]
@@ -72,10 +74,10 @@ func (circuit *TCircom[Base, Scalars]) Define(api frontend.API) error {
 
 	cr.AssertIsOnCurve(&circuit.Pub)
 	api.Println("Pub check on curve ok")
-	SmallR := emulated.ValueOf[Scalars](circuit.SmallR)
-	BigR := cr.ScalarMulBase(&SmallR)
+	//SmallR := emulated.ValueOf[Scalars](circuit.SmallR)
+	BigR := cr.ScalarMulBase(&circuit.SmallR)
 
-	Rpub := cr.ScalarMul(&circuit.Pub, &SmallR)
+	Rpub := cr.ScalarMul(&circuit.Pub, &circuit.SmallR)
 
 	cr.AssertIsEqual(Rpub, &circuit.RPub)
 	api.Println("RPub check equal ok")
@@ -83,15 +85,8 @@ func (circuit *TCircom[Base, Scalars]) Define(api frontend.API) error {
 	cr.AssertIsEqual(BigR, &circuit.BigR)
 	api.Println("BigR check equal ok")
 
-	//cr.AssertIsOnCurve(&circuit.BigR)
-	//X := cr.MarshalG1(circuit.BigR)
-	//api.Println("R.V:", len(X))
-	//RB := cr.MarshalG1(circuit.BigR)
-	//api.Println("R", RB)
-	//cr.AssertIsOnCurve(&circuit.BigR)
-	//api.Println("R.X", circuit.BigR)
-	//api.Println("R.Y", circuit.BigR.Y)
-	// scalarApi, err := emulated.NewField[S](api)
+	//to do
+	// check rpub==>key
 
 	return nil
 }
@@ -118,8 +113,104 @@ func TestCircom(t *testing.T) {
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
 
+	r := big.Int{}
+	SmallR := r.SetInt64(rand.Int63())
+
 	//generator R
-	SmallR, err := randFieldElement1(rand)
+	//SmallR, err := randFieldElement1(rand)
+	//_, g1 := secp256k1.Generators()
+	var R secp256k1.G1Affine
+	R.ScalarMultiplicationBase(SmallR)
+
+	//generator PublicKey
+	privKey, err := ecies.GenerateKey(rand, crypto.S256(), nil)
+	if err != nil {
+		return
+	}
+	pub := privKey.PublicKey
+
+	var px fp.Element
+	px.SetInterface(pub.X)
+
+	var py fp.Element
+	py.SetInterface(pub.Y)
+
+	Pub := secp256k1.G1Affine{
+		px,
+		py,
+	}
+
+	var RPub secp256k1.G1Affine
+	RPub.ScalarMultiplication(&Pub, SmallR)
+
+	m := []byte{0x01, 0x02}
+	M_bytes := make([]frontend.Variable, len(m))
+	for i := 0; i < len(m); i++ {
+		M_bytes[i] = m[i]
+	}
+
+	//key := pub.X.Bytes()
+	//key := RPub.X.Bytes() //因该取x+y
+	key := make([]byte, len(RPub.RawBytes()))
+	for i := 0; i < len(key); i++ {
+		key[i] = RPub.RawBytes()[i]
+	}
+	hasher := sha3.New256()
+	hasher.Write(key)
+	expected := hasher.Sum(nil)
+	//key = key[:16]
+	key_bytes := [32]frontend.Variable{}
+	for i := 0; i < len(expected); i++ {
+		key_bytes[i] = expected[i]
+	}
+
+	ciphertext, nonce := AesGcmEncrypt(key, m)
+	Ciphertext_bytes := make([]frontend.Variable, len(ciphertext))
+	for i := 0; i < len(ciphertext); i++ {
+		Ciphertext_bytes[i] = ciphertext[i]
+	}
+	ChunkIndex := len(Ciphertext_bytes)/16 + 1
+
+	nonce_bytes := [12]frontend.Variable{}
+	for i := 0; i < len(nonce); i++ {
+		nonce_bytes[i] = nonce[i]
+	}
+
+	circuit := TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
+	witness := TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+		Key:          key_bytes,
+		PlainChunks:  M_bytes,
+		Iv:           nonce_bytes,
+		ChunkIndex:   ChunkIndex,
+		CipherChunks: Ciphertext_bytes,
+		In:           uints.NewU8Array(key),
+		Expected:     uints.NewU8Array(expected),
+		SmallR:       emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
+		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](R.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
+		},
+		Pub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](pub.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](pub.Y),
+		},
+		RPub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
+		},
+	}
+
+	assert := test.NewAssert(t)
+	err = test.IsSolved(&circuit, &witness, ecc.BN254.ScalarField())
+	assert.NoError(err)
+}
+
+func TestCircom2(t *testing.T) {
+	source := rand.NewSource(time.Now().UnixNano())
+	rand := rand.New(source)
+
+	r := big.Int{}
+	SmallR := r.SetInt64(rand.Int63())
 	//_, g1 := secp256k1.Generators()
 	var R secp256k1.G1Affine
 	R.ScalarMultiplicationBase(SmallR)
@@ -176,8 +267,22 @@ func TestCircom(t *testing.T) {
 		nonce_bytes[i] = nonce[i]
 	}
 
-	circuit := TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
-	witness := TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+	//编译电路
+	var myCircuit TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]
+	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &myCircuit)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	//初始化
+	pk, vk, _ := doMPCSetUp(css)
+	// 1. One time setup
+	err = groth16.Setup(css.(*cs.R1CS), &pk, &vk)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	//提供输入输出
+	assignment := &TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
 		Key:          key_bytes,
 		PlainChunks:  M_bytes,
 		Iv:           nonce_bytes,
@@ -185,7 +290,7 @@ func TestCircom(t *testing.T) {
 		CipherChunks: Ciphertext_bytes,
 		In:           uints.NewU8Array(key),
 		Expected:     uints.NewU8Array(expected),
-		SmallR:       SmallR,
+		SmallR:       emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
 		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
 			X: emulated.ValueOf[emulated.Secp256k1Fp](R.X),
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
@@ -199,69 +304,28 @@ func TestCircom(t *testing.T) {
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
 		},
 	}
-
-	assert := test.NewAssert(t)
-	err = test.IsSolved(&circuit, &witness, ecc.BN254.ScalarField())
-	assert.NoError(err)
+	//计算witness
+	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	publicWitness, err := witness.Public()
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	// 计算证明
+	proof, err := groth16.Prove(css.(*cs.R1CS), &pk, witness)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	//验证证明
+	err = groth16.Verify(proof, &vk, publicWitness.Vector().(fr_bn254.Vector))
+	if err != nil {
+		return
+	}
+	t.Logf("circom test ok ")
 }
 
-/*
-	func TestCircom(t *testing.T) {
-		//编译电路
-		var myCircuit TCircom[emulated.Secp256k1Fr, emulated.Secp256k1Fp]
-		css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &myCircuit)
-		if err != nil {
-			t.Fatalf(err.Error())
-		}
-		//初始化
-		pk, vk, _ := doMPCSetUp(css)
-		// 1. One time setup
-		err = groth16.Setup(css.(*cs.R1CS), &pk, &vk)
-		if err != nil {
-			t.Fatalf(err.Error())
-		}
-		source := rand.NewSource(time.Now().UnixNano())
-		random := rand.New(source)
-		R, err := randFieldElement1(random)
-		if err != nil {
-			t.Errorf(err.Error())
-		}
-		//提供输入输出
-		assignment := &TCircom[emulated.Secp256k1Fr, emulated.Secp256k1Fp]{
-			Key:          key_bytes,
-			PlainChunks:  M_bytes,
-			Iv:           nonce_bytes,
-			ChunkIndex:   ChunkIndex,
-			CipherChunks: Ciphertext_bytes,
-
-			X: frontend.Variable(R),
-			PublicKey: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-				X: emulated.ValueOf[emulated.Secp256k1Fp](Pubkey.X),
-				Y: emulated.ValueOf[emulated.Secp256k1Fp](Pubkey.Y),
-			},
-		}
-		//计算witness
-		witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
-		if err != nil {
-			t.Fatalf(err.Error())
-		}
-		publicWitness, err := witness.Public()
-		if err != nil {
-			t.Fatalf(err.Error())
-		}
-		// 计算证明
-		proof, err := groth16.Prove(css.(*cs.R1CS), &pk, witness)
-		if err != nil {
-			t.Fatalf(err.Error())
-		}
-		//验证证明
-		err = groth16.Verify(proof, &vk, publicWitness.Vector().(fr_bn254.Vector))
-		if err != nil {
-			return
-		}
-		t.Logf("circom test ok ")
-	}
-*/
 func doMPCSetUp(ccs constraint.ConstraintSystem) (pk groth16.ProvingKey, vk groth16.VerifyingKey, err error) {
 	const (
 		nContributionsPhase1 = 3
