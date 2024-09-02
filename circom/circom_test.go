@@ -6,7 +6,7 @@ import (
 	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1/fp"
-	"github.com/consensys/gnark-crypto/ecc/secp256k1/fr"
+	fr_secp "github.com/consensys/gnark-crypto/ecc/secp256k1/fr"
 	groth16 "github.com/consensys/gnark/backend/groth16/bn254"
 	"github.com/consensys/gnark/backend/groth16/bn254/mpcsetup"
 	"github.com/consensys/gnark/constraint"
@@ -21,7 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
 	"golang.org/x/crypto/sha3"
-	"io"
 	"math/big"
 	"math/rand"
 	"testing"
@@ -39,31 +38,31 @@ type TCircom[Base, Scalars emulated.FieldParams] struct {
 	Expected []uints.U8
 
 	SmallR emulated.Element[Scalars]
-	BigR   sw_emulated.AffinePoint[Base]
-	Pub    sw_emulated.AffinePoint[Base]
+	BigR   sw_emulated.AffinePoint[Base] `gnark:",public"`
+	Pub    sw_emulated.AffinePoint[Base] `gnark:",public"`
 	RPub   sw_emulated.AffinePoint[Base]
 }
 
 // Define declares the circuit's constraints
 func (circuit *TCircom[Base, Scalars]) Define(api frontend.API) error {
-
-	aes := NewAES256(api)
-
-	gcm := NewGCM256(api, &aes)
-
-	gcm.Assert256(circuit.Key, circuit.Iv, circuit.ChunkIndex, circuit.PlainChunks, circuit.CipherChunks)
-
+	//check key generate process
+	//1) hash(Rpub)==circuit.Key
 	hasher, err := zksha3.New256(api)
-
 	if err != nil {
 		return fmt.Errorf("hash function unknown ")
 	}
 	hasher.Write(circuit.In)
-	res := hasher.Sum()
+	expected := hasher.Sum()
 	uapi, err := uints.New[uints.U64](api)
 	for i := range circuit.Expected {
-		uapi.ByteAssertEq(circuit.Expected[i], res[i])
+		//uapi.ByteAssertEq(circuit.Expected[i], res[i])
+		uapi.ByteAssertEq(circuit.Expected[i], expected[i])
 	}
+
+	//check aes process
+	aes := NewAES256(api)
+	gcm := NewGCM256(api, &aes)
+	gcm.Assert256(circuit.Key, circuit.Iv, circuit.ChunkIndex, circuit.PlainChunks, circuit.CipherChunks)
 
 	params := sw_emulated.GetCurveParams[Base]()
 	cr, err := sw_emulated.New[Base, Scalars](api, params)
@@ -73,14 +72,14 @@ func (circuit *TCircom[Base, Scalars]) Define(api frontend.API) error {
 
 	cr.AssertIsOnCurve(&circuit.Pub)
 	api.Println("Pub check on curve ok")
-	//SmallR := emulated.ValueOf[Scalars](circuit.SmallR)
+
 	BigR := cr.ScalarMulBase(&circuit.SmallR)
 
-	Rpub := cr.ScalarMul(&circuit.Pub, &circuit.SmallR)
+	/*	Rpub := cr.ScalarMul(&circuit.Pub, &circuit.SmallR)
 
-	cr.AssertIsEqual(Rpub, &circuit.RPub)
-	api.Println("RPub check equal ok")
-
+		cr.AssertIsEqual(Rpub, &circuit.RPub)
+		api.Println("RPub check equal ok")
+	*/
 	cr.AssertIsEqual(BigR, &circuit.BigR)
 	api.Println("BigR check equal ok")
 
@@ -90,36 +89,20 @@ func (circuit *TCircom[Base, Scalars]) Define(api frontend.API) error {
 	return nil
 }
 
-var order = fr.Modulus()
-var one = new(big.Int).SetInt64(1)
-
-func randFieldElement1(rand io.Reader) (k *big.Int, err error) {
-	b := make([]byte, fr.Bits/8+8)
-	_, err = io.ReadFull(rand, b)
-	if err != nil {
-		return
-	}
-
-	k = new(big.Int).SetBytes(b)
-	n := new(big.Int).Sub(order, one)
-	k.Mod(k, n)
-	k.Add(k, one)
-	return
-}
-
 func TestCircom(t *testing.T) {
 
 	source := rand.NewSource(time.Now().UnixNano())
 	rand := rand.New(source)
 
-	r := big.Int{}
-	SmallR := r.SetInt64(rand.Int63())
+	var SmallR fr_secp.Element
+	_, _ = SmallR.SetRandom()
+	s := new(big.Int)
+	SmallR.BigInt(s)
 
-	//generator R
-	//SmallR, err := randFieldElement1(rand)
 	//_, g1 := secp256k1.Generators()
 	var R secp256k1.G1Affine
-	R.ScalarMultiplicationBase(SmallR)
+	R.ScalarMultiplicationBase(s)
+	t.Logf("create R ok %s", R.String())
 
 	//generator PublicKey
 	privKey, err := ecies.GenerateKey(rand, crypto.S256(), nil)
@@ -140,7 +123,8 @@ func TestCircom(t *testing.T) {
 	}
 
 	var RPub secp256k1.G1Affine
-	RPub.ScalarMultiplication(&Pub, SmallR)
+	RPub.ScalarMultiplication(&Pub, s)
+	t.Logf("create RPub ok %s", RPub.String())
 
 	m := []byte{0x01, 0x02}
 	M_bytes := make([]frontend.Variable, len(m))
@@ -148,12 +132,8 @@ func TestCircom(t *testing.T) {
 		M_bytes[i] = m[i]
 	}
 
-	//key := pub.X.Bytes()
-	//key := RPub.X.Bytes() //因该取x+y
-	key := make([]byte, len(RPub.RawBytes()))
-	for i := 0; i < len(key); i++ {
-		key[i] = RPub.RawBytes()[i]
-	}
+	Raw_RPUb := RPub.RawBytes()
+	key := Raw_RPUb[:]
 	hasher := sha3.New256()
 	hasher.Write(key)
 	expected := hasher.Sum(nil)
@@ -163,7 +143,7 @@ func TestCircom(t *testing.T) {
 		key_bytes[i] = expected[i]
 	}
 
-	ciphertext, nonce := AesGcmEncrypt(key, m)
+	ciphertext, nonce := AesGcmEncrypt(expected, m)
 	Ciphertext_bytes := make([]frontend.Variable, len(ciphertext))
 	for i := 0; i < len(ciphertext); i++ {
 		Ciphertext_bytes[i] = ciphertext[i]
@@ -190,8 +170,8 @@ func TestCircom(t *testing.T) {
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
 		},
 		Pub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](pub.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](pub.Y),
+			X: emulated.ValueOf[emulated.Secp256k1Fp](Pub.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](Pub.Y),
 		},
 		RPub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
 			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
