@@ -51,7 +51,6 @@ func (circuit *TCircom[Base, Scalars]) Define(api frontend.API) error {
 
 	gcm := NewGCM256(api, &aes)
 
-	// verify aes gcm of chunks
 	gcm.Assert256(circuit.Key, circuit.Iv, circuit.ChunkIndex, circuit.PlainChunks, circuit.CipherChunks)
 
 	hasher, err := zksha3.New256(api)
