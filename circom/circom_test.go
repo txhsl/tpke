@@ -117,14 +117,21 @@ func (c *MixEncryptionTest[T, S]) Define(api frontend.API) error {
 	if err != nil {
 		return err
 	}
-	res := cr.ScalarMulBase(&c.SmallR)
-	cr.AssertIsEqual(res, &c.BigR)
+	//check BigR=rG
+	cr.AssertIsOnCurve(&c.BigR)
+	api.Println("R check on curve ok")
+	BigR := cr.ScalarMulBase(&c.SmallR)
+	cr.AssertIsEqual(BigR, &c.BigR)
+	api.Println("R =rG check ok")
 	//check pub
 	cr.AssertIsOnCurve(&c.Pub)
 	api.Println("Pub check on curve ok")
 	//check RPub
-	Rpub := cr.ScalarMul(&c.Pub, &c.SmallR)
-	cr.AssertIsEqual(Rpub, &c.RPub)
+	cr.AssertIsOnCurve(&c.RPub)
+	api.Println("RPub check on curve ok")
+	RPub := cr.ScalarMul(&c.Pub, &c.SmallR)
+	cr.AssertIsEqual(RPub, &c.RPub)
+	api.Println("RPub =rPub check ok")
 
 	//check hash(Rpub)==circuit.Key
 	hasher, err := zksha3.New256(api)
@@ -137,6 +144,13 @@ func (c *MixEncryptionTest[T, S]) Define(api frontend.API) error {
 	for i := range c.Expected {
 		uapi.ByteAssertEq(c.Expected[i], expected[i])
 	}
+	api.Println("hash(Rpub) check ok")
+
+	//check aes process
+	aes := NewAES256(api)
+	gcm := NewGCM256(api, &aes)
+	gcm.Assert256(c.Key, c.Iv, c.ChunkIndex, c.PlainChunks, c.CipherChunks)
+	api.Println("aes check ok")
 
 	return nil
 }
