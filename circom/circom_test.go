@@ -27,284 +27,6 @@ import (
 	"time"
 )
 
-type TCircom[Base, Scalars emulated.FieldParams] struct {
-	Key          [32]frontend.Variable
-	PlainChunks  []frontend.Variable
-	Iv           [12]frontend.Variable `gnark:",public"`
-	ChunkIndex   frontend.Variable     `gnark:",public"`
-	CipherChunks []frontend.Variable   `gnark:",public"`
-
-	In       []uints.U8
-	Expected []uints.U8
-
-	SmallR emulated.Element[Scalars]
-	BigR   sw_emulated.AffinePoint[Base] `gnark:",public"`
-	Pub    sw_emulated.AffinePoint[Base] `gnark:",public"`
-	RPub   sw_emulated.AffinePoint[Base]
-}
-
-// Define declares the circuit's constraints
-func (circuit *TCircom[Base, Scalars]) Define(api frontend.API) error {
-	//check key generate process
-	//1) hash(Rpub)==circuit.Key
-	hasher, err := zksha3.New256(api)
-	if err != nil {
-		return fmt.Errorf("hash function unknown ")
-	}
-	hasher.Write(circuit.In)
-	expected := hasher.Sum()
-	uapi, err := uints.New[uints.U64](api)
-	for i := range circuit.Expected {
-		//uapi.ByteAssertEq(circuit.Expected[i], res[i])
-		uapi.ByteAssertEq(circuit.Expected[i], expected[i])
-	}
-
-	//check aes process
-	aes := NewAES256(api)
-	gcm := NewGCM256(api, &aes)
-	gcm.Assert256(circuit.Key, circuit.Iv, circuit.ChunkIndex, circuit.PlainChunks, circuit.CipherChunks)
-
-	params := sw_emulated.GetCurveParams[Base]()
-	cr, err := sw_emulated.New[Base, Scalars](api, params)
-	if err != nil {
-		panic(err)
-	}
-
-	cr.AssertIsOnCurve(&circuit.Pub)
-	api.Println("Pub check on curve ok")
-
-	BigR := cr.ScalarMulBase(&circuit.SmallR)
-
-	/*	Rpub := cr.ScalarMul(&circuit.Pub, &circuit.SmallR)
-
-		cr.AssertIsEqual(Rpub, &circuit.RPub)
-		api.Println("RPub check equal ok")
-	*/
-	cr.AssertIsEqual(BigR, &circuit.BigR)
-	api.Println("BigR check equal ok")
-
-	//to do
-	// check rpub==>key
-
-	return nil
-}
-
-func TestCircom(t *testing.T) {
-
-	source := rand.NewSource(time.Now().UnixNano())
-	rand := rand.New(source)
-
-	var SmallR fr_secp.Element
-	_, _ = SmallR.SetRandom()
-	s := new(big.Int)
-	SmallR.BigInt(s)
-
-	//_, g1 := secp256k1.Generators()
-	var R secp256k1.G1Affine
-	R.ScalarMultiplicationBase(s)
-	t.Logf("create R ok %s", R.String())
-
-	//generator PublicKey
-	privKey, err := ecies.GenerateKey(rand, crypto.S256(), nil)
-	if err != nil {
-		return
-	}
-	pub := privKey.PublicKey
-
-	var px fp.Element
-	px.SetInterface(pub.X)
-
-	var py fp.Element
-	py.SetInterface(pub.Y)
-
-	Pub := secp256k1.G1Affine{
-		px,
-		py,
-	}
-
-	var RPub secp256k1.G1Affine
-	RPub.ScalarMultiplication(&Pub, s)
-	t.Logf("create RPub ok %s", RPub.String())
-
-	m := []byte{0x01, 0x02}
-	M_bytes := make([]frontend.Variable, len(m))
-	for i := 0; i < len(m); i++ {
-		M_bytes[i] = m[i]
-	}
-
-	Raw_RPUb := RPub.RawBytes()
-	key := Raw_RPUb[:]
-	hasher := sha3.New256()
-	hasher.Write(key)
-	expected := hasher.Sum(nil)
-	//key = key[:16]
-	key_bytes := [32]frontend.Variable{}
-	for i := 0; i < len(expected); i++ {
-		key_bytes[i] = expected[i]
-	}
-
-	ciphertext, nonce := AesGcmEncrypt(expected, m)
-	Ciphertext_bytes := make([]frontend.Variable, len(ciphertext))
-	for i := 0; i < len(ciphertext); i++ {
-		Ciphertext_bytes[i] = ciphertext[i]
-	}
-	ChunkIndex := len(Ciphertext_bytes)/16 + 1
-
-	nonce_bytes := [12]frontend.Variable{}
-	for i := 0; i < len(nonce); i++ {
-		nonce_bytes[i] = nonce[i]
-	}
-
-	circuit := TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
-	witness := TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
-		Key:          key_bytes,
-		PlainChunks:  M_bytes,
-		Iv:           nonce_bytes,
-		ChunkIndex:   ChunkIndex,
-		CipherChunks: Ciphertext_bytes,
-		In:           uints.NewU8Array(key),
-		Expected:     uints.NewU8Array(expected),
-		SmallR:       emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
-		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](R.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
-		},
-		Pub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](Pub.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](Pub.Y),
-		},
-		RPub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
-		},
-	}
-
-	assert := test.NewAssert(t)
-	err = test.IsSolved(&circuit, &witness, ecc.BN254.ScalarField())
-	assert.NoError(err)
-}
-
-func TestCircom2(t *testing.T) {
-	source := rand.NewSource(time.Now().UnixNano())
-	rand := rand.New(source)
-
-	r := big.Int{}
-	SmallR := r.SetInt64(rand.Int63())
-	//_, g1 := secp256k1.Generators()
-	var R secp256k1.G1Affine
-	R.ScalarMultiplicationBase(SmallR)
-	t.Logf("create R ok %s", R.String())
-
-	//generator PublicKey
-	privKey, err := ecies.GenerateKey(rand, crypto.S256(), nil)
-	if err != nil {
-		return
-	}
-	pub := privKey.PublicKey
-
-	var px fp.Element
-	px.SetInterface(pub.X)
-
-	var py fp.Element
-	py.SetInterface(pub.Y)
-
-	Pub := secp256k1.G1Affine{
-		px,
-		py,
-	}
-
-	var RPub secp256k1.G1Affine
-	RPub.ScalarMultiplication(&Pub, SmallR)
-	t.Logf("create R ok %s", RPub.String())
-
-	m := []byte{0x01, 0x02}
-	M_bytes := make([]frontend.Variable, len(m))
-	for i := 0; i < len(m); i++ {
-		M_bytes[i] = m[i]
-	}
-
-	//key := pub.X.Bytes()
-	key := pub.X.Bytes()
-	hasher := sha3.New256()
-	hasher.Write(key)
-	expected := hasher.Sum(nil)
-	//key = key[:16]
-	key_bytes := [32]frontend.Variable{}
-	for i := 0; i < len(expected); i++ {
-		key_bytes[i] = expected[i]
-	}
-
-	ciphertext, nonce := AesGcmEncrypt(key, m)
-	Ciphertext_bytes := make([]frontend.Variable, len(ciphertext))
-	for i := 0; i < len(ciphertext); i++ {
-		Ciphertext_bytes[i] = ciphertext[i]
-	}
-	ChunkIndex := len(Ciphertext_bytes)/16 + 1
-
-	nonce_bytes := [12]frontend.Variable{}
-	for i := 0; i < len(nonce); i++ {
-		nonce_bytes[i] = nonce[i]
-	}
-
-	//编译电路
-	var myCircuit TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]
-	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &myCircuit)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	//初始化
-	pk, vk, _ := doMPCSetUp(css)
-	// 1. One time setup
-	err = groth16.Setup(css.(*cs.R1CS), &pk, &vk)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	//提供输入输出
-	assignment := &TCircom[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
-		Key:          key_bytes,
-		PlainChunks:  M_bytes,
-		Iv:           nonce_bytes,
-		ChunkIndex:   ChunkIndex,
-		CipherChunks: Ciphertext_bytes,
-		In:           uints.NewU8Array(key),
-		Expected:     uints.NewU8Array(expected),
-		SmallR:       emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
-		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](R.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](R.Y),
-		},
-		Pub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](pub.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](pub.Y),
-		},
-		RPub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
-			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
-			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
-		},
-	}
-	//计算witness
-	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	publicWitness, err := witness.Public()
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	// 计算证明
-	proof, err := groth16.Prove(css.(*cs.R1CS), &pk, witness)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	//验证证明
-	err = groth16.Verify(proof, &vk, publicWitness.Vector().(fr_bn254.Vector))
-	if err != nil {
-		return
-	}
-	t.Logf("circom test ok ")
-}
-
 func doMPCSetUp(ccs constraint.ConstraintSystem) (pk groth16.ProvingKey, vk groth16.VerifyingKey, err error) {
 	const (
 		nContributionsPhase1 = 3
@@ -373,4 +95,247 @@ func Phase2clone(phase2 mpcsetup.Phase2) mpcsetup.Phase2 {
 	r.PublicKey = phase2.PublicKey
 	r.Hash = append(r.Hash, phase2.Hash...)
 	return r
+}
+
+type MixEncryptionTest[T, S emulated.FieldParams] struct {
+	SmallR   emulated.Element[S]
+	BigR     sw_emulated.AffinePoint[T]
+	Pub      sw_emulated.AffinePoint[T]
+	RPub     sw_emulated.AffinePoint[T]
+	In       []uints.U8
+	Expected []uints.U8
+
+	Key          [32]frontend.Variable
+	PlainChunks  []frontend.Variable
+	Iv           [12]frontend.Variable `gnark:",public"`
+	ChunkIndex   frontend.Variable     `gnark:",public"`
+	CipherChunks []frontend.Variable   `gnark:",public"`
+}
+
+func (c *MixEncryptionTest[T, S]) Define(api frontend.API) error {
+	cr, err := sw_emulated.New[T, S](api, sw_emulated.GetCurveParams[T]())
+	if err != nil {
+		return err
+	}
+	res := cr.ScalarMulBase(&c.SmallR)
+	cr.AssertIsEqual(res, &c.BigR)
+	//check pub
+	cr.AssertIsOnCurve(&c.Pub)
+	api.Println("Pub check on curve ok")
+	//check RPub
+	Rpub := cr.ScalarMul(&c.Pub, &c.SmallR)
+	cr.AssertIsEqual(Rpub, &c.RPub)
+
+	//check hash(Rpub)==circuit.Key
+	hasher, err := zksha3.New256(api)
+	if err != nil {
+		return fmt.Errorf("hash function unknown ")
+	}
+	hasher.Write(c.In)
+	expected := hasher.Sum()
+	uapi, err := uints.New[uints.U64](api)
+	for i := range c.Expected {
+		uapi.ByteAssertEq(c.Expected[i], expected[i])
+	}
+
+	return nil
+}
+
+func TestMixEncryption(t *testing.T) {
+	_, g := secp256k1.Generators()
+	var r fr_secp.Element
+	_, _ = r.SetRandom()
+	SmallR := new(big.Int)
+	r.BigInt(SmallR)
+	var BigR secp256k1.G1Affine
+	BigR.ScalarMultiplication(&g, SmallR)
+
+	//generator PublicKey
+	source := rand.NewSource(time.Now().UnixNano())
+	rand := rand.New(source)
+	privKey, err := ecies.GenerateKey(rand, crypto.S256(), nil)
+	if err != nil {
+		return
+	}
+	var px fp.Element
+	px.SetInterface(privKey.PublicKey.X)
+	var py fp.Element
+	py.SetInterface(privKey.PublicKey.Y)
+	Pub := secp256k1.G1Affine{
+		px,
+		py,
+	}
+	//generator RPub=r*PublicKey
+	var RPub secp256k1.G1Affine
+	RPub.ScalarMultiplication(&Pub, SmallR)
+	//t.Logf("create RPub ok %s", RPub.String())
+
+	Raw_RPUb := RPub.RawBytes()
+	key := Raw_RPUb[:]
+	hasher := sha3.New256()
+	hasher.Write(key)
+	expected := hasher.Sum(nil)
+	key_bytes := [32]frontend.Variable{}
+	for i := 0; i < len(expected); i++ {
+		key_bytes[i] = expected[i]
+	}
+
+	m := []byte{0x01, 0x02}
+	M_bytes := make([]frontend.Variable, len(m))
+	for i := 0; i < len(m); i++ {
+		M_bytes[i] = m[i]
+	}
+	ciphertext, nonce := AesGcmEncrypt(expected, m)
+	Ciphertext_bytes := make([]frontend.Variable, len(ciphertext))
+	for i := 0; i < len(ciphertext); i++ {
+		Ciphertext_bytes[i] = ciphertext[i]
+	}
+	ChunkIndex := len(Ciphertext_bytes)/16 + 1
+
+	nonce_bytes := [12]frontend.Variable{}
+	for i := 0; i < len(nonce); i++ {
+		nonce_bytes[i] = nonce[i]
+	}
+
+	circuit := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
+	witness := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+		SmallR: emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
+		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](BigR.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](BigR.Y),
+		},
+		Pub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](Pub.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](Pub.Y),
+		},
+		RPub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
+		},
+		In:       uints.NewU8Array(key),
+		Expected: uints.NewU8Array(expected),
+
+		Key:          key_bytes,
+		PlainChunks:  M_bytes,
+		Iv:           nonce_bytes,
+		ChunkIndex:   ChunkIndex,
+		CipherChunks: Ciphertext_bytes,
+	}
+	err = test.IsSolved(&circuit, &witness, ecc.BN254.ScalarField())
+	assert := test.NewAssert(t)
+	assert.NoError(err)
+}
+
+func TestMixEncryptionByMPC(t *testing.T) {
+	_, g := secp256k1.Generators()
+	var r fr_secp.Element
+	_, _ = r.SetRandom()
+	SmallR := new(big.Int)
+	r.BigInt(SmallR)
+	var BigR secp256k1.G1Affine
+	BigR.ScalarMultiplication(&g, SmallR)
+
+	//generator PublicKey
+	source := rand.NewSource(time.Now().UnixNano())
+	rand := rand.New(source)
+	privKey, err := ecies.GenerateKey(rand, crypto.S256(), nil)
+	if err != nil {
+		return
+	}
+	var px fp.Element
+	px.SetInterface(privKey.PublicKey.X)
+	var py fp.Element
+	py.SetInterface(privKey.PublicKey.Y)
+	Pub := secp256k1.G1Affine{
+		px,
+		py,
+	}
+	//generator RPub=r*PublicKey
+	var RPub secp256k1.G1Affine
+	RPub.ScalarMultiplication(&Pub, SmallR)
+	//t.Logf("create RPub ok %s", RPub.String())
+
+	Raw_RPUb := RPub.RawBytes()
+	key := Raw_RPUb[:]
+	hasher := sha3.New256()
+	hasher.Write(key)
+	expected := hasher.Sum(nil)
+	key_bytes := [32]frontend.Variable{}
+	for i := 0; i < len(expected); i++ {
+		key_bytes[i] = expected[i]
+	}
+
+	m := []byte{0x01, 0x02}
+	M_bytes := make([]frontend.Variable, len(m))
+	for i := 0; i < len(m); i++ {
+		M_bytes[i] = m[i]
+	}
+	ciphertext, nonce := AesGcmEncrypt(expected, m)
+	Ciphertext_bytes := make([]frontend.Variable, len(ciphertext))
+	for i := 0; i < len(ciphertext); i++ {
+		Ciphertext_bytes[i] = ciphertext[i]
+	}
+	ChunkIndex := len(Ciphertext_bytes)/16 + 1
+
+	nonce_bytes := [12]frontend.Variable{}
+	for i := 0; i < len(nonce); i++ {
+		nonce_bytes[i] = nonce[i]
+	}
+
+	circuit := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
+	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuit)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	//初始化
+	pk, vk, _ := doMPCSetUp(css)
+	// 1. One time setup
+	err = groth16.Setup(css.(*cs.R1CS), &pk, &vk)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	assignment := &MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+		SmallR: emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
+		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](BigR.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](BigR.Y),
+		},
+		Pub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](Pub.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](Pub.Y),
+		},
+		RPub: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
+			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
+			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
+		},
+		In:       uints.NewU8Array(key),
+		Expected: uints.NewU8Array(expected),
+
+		Key:          key_bytes,
+		PlainChunks:  M_bytes,
+		Iv:           nonce_bytes,
+		ChunkIndex:   ChunkIndex,
+		CipherChunks: Ciphertext_bytes,
+	}
+	//计算witness
+	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	publicWitness, err := witness.Public()
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	// 计算证明
+	proof, err := groth16.Prove(css.(*cs.R1CS), &pk, witness)
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+	//验证证明
+	err = groth16.Verify(proof, &vk, publicWitness.Vector().(fr_bn254.Vector))
+	if err != nil {
+		return
+	}
+	t.Logf("circom test ok ")
 }
