@@ -18,10 +18,13 @@ package circom
 
 import (
 	"github.com/consensys/gnark-crypto/ecc"
+	"github.com/consensys/gnark-crypto/ecc/secp256k1"
+	"github.com/consensys/gnark-crypto/ecc/secp256k1/fp"
 	"github.com/consensys/gnark/frontend"
 	"github.com/consensys/gnark/test"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
+	"golang.org/x/crypto/sha3"
 	"math/rand"
 	"testing"
 	"time"
@@ -140,40 +143,71 @@ func TestAESGCM256Circuit(t *testing.T) {
 	if err != nil {
 		return
 	}
-	pub := privKey.PublicKey
-
-	m := []byte{0x01, 0x02}
+	var px fp.Element
+	px.SetInterface(privKey.PublicKey.X)
+	var py fp.Element
+	py.SetInterface(privKey.PublicKey.Y)
+	Pub := secp256k1.G1Affine{
+		px,
+		py,
+	}
+	RawKey := Pub.RawBytes()
+	//m := RawKey[:]
+	//m := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D}
+	//m := []byte{0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34}
+	m := []byte{0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34, 0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d, 0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34}
 	M_bytes := make([]frontend.Variable, len(m))
 	for i := 0; i < len(m); i++ {
 		M_bytes[i] = m[i]
 	}
 
-	//key := pub.X.Bytes()
-	key := pub.X.Bytes()
-	//key = key[:16]
-	key_bytes := [32]frontend.Variable{}
-	for i := 0; i < len(key); i++ {
-		key_bytes[i] = key[i]
+	hasher := sha3.New256()
+	hasher.Write(RawKey[:])
+	//expected := hasher.Sum(nil)
+	expected := [32]byte{0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b, 0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81, 0x1f, 0x35, 0x2c, 0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09, 0x14, 0xdf, 0xf4}
+	keyBytes := [32]frontend.Variable{}
+	for i := 0; i < len(keyBytes); i++ {
+		keyBytes[i] = expected[i]
 	}
 
-	ciphertext, nonce := AesGcmEncrypt(key, m)
+	ciphertext, nonce := AesGcmEncrypt(expected[:], m)
+	//iphertext = ciphertext[len(nonce):]
+	t.Logf("out aesencrypt,m:%x", m)
+	t.Logf("out aesencrypt,ciphertext:%x", ciphertext)
+	t.Logf("out aesencrypt,nonce:%x", nonce)
 	Ciphertext_bytes := make([]frontend.Variable, len(ciphertext))
 	for i := 0; i < len(ciphertext); i++ {
 		Ciphertext_bytes[i] = ciphertext[i]
 	}
-	ChunkIndex := len(Ciphertext_bytes)/16 + 1
-
 	nonce_bytes := [12]frontend.Variable{}
 	for i := 0; i < len(nonce); i++ {
 		nonce_bytes[i] = nonce[i]
 	}
 
-	circuit := GCM256Wrapper{}
+	/*	var ChunkIndex int
+		if len(ciphertext)%16 == 0 {
+			ChunkIndex = len(ciphertext) / 16
+		} else {
+			ChunkIndex = len(ciphertext)/16 + 1
+		}*/
+	var ChunkIndex int
+	ChunkIndex |= int(0) << 24
+	ChunkIndex |= int(1) << 31
+	/*	ChunkIndex |= int(nonce[0])
+		ChunkIndex |= int(nonce[1]) << 8
+		ChunkIndex |= int(nonce[2]) << 16
+		ChunkIndex |= int(nonce[3]) << 24
+		ChunkIndex |= 1*/
+	circuit := GCM256Wrapper{
+		PlainChunks:  make([]frontend.Variable, len(M_bytes)),
+		CipherChunks: make([]frontend.Variable, len(Ciphertext_bytes)),
+	}
 	witness := GCM256Wrapper{
-		Key:          key_bytes,
-		PlainChunks:  M_bytes,
-		Iv:           nonce_bytes,
-		ChunkIndex:   ChunkIndex,
+		Key:         keyBytes,
+		PlainChunks: M_bytes,
+		Iv:          nonce_bytes,
+		ChunkIndex:  2,
+		//ChunkIndex:   ChunkIndex,
 		CipherChunks: Ciphertext_bytes,
 	}
 

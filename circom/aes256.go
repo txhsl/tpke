@@ -60,7 +60,8 @@ func (aes *AES256) Encrypt(key [32]frontend.Variable, pt [16]frontend.Variable) 
 
 	//RCon := [11]frontend.Variable{0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36}
 
-	RCon := [15]frontend.Variable{0x01000000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000, 0x80000000, 0x1B000000, 0x36000000, 0x6C000000, 0xD8000000, 0xAB000000, 0x4D000000, 0x9A000000}
+	//RCon := [15]frontend.Variable{0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D, 0x9A}
+	RCon := [30]frontend.Variable{0x8d, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36, 0x6C, 0xD8, 0xAB, 0x4D, 0x9A, 0x2F, 0x5E, 0xBC, 0x63, 0xC6, 0x97, 0x35, 0x6A, 0xD4, 0xB3, 0x7D, 0xFA, 0xEF, 0xC5}
 
 	// expand key
 	expandedKey := aes.expandKey(key, sbox0, RCon)
@@ -255,14 +256,13 @@ func (aes *AES256) variableXor(a frontend.Variable, b frontend.Variable, size in
 	return aes.api.FromBinary(x...)
 }
 
-// expands 16 byte key to 176 byte output
 // expands 32 byte key to 240 byte output
-func (aes *AES256) expandKey(key [32]frontend.Variable, sbox0 [256]frontend.Variable, RCon [15]frontend.Variable) [240]frontend.Variable {
+func (aes *AES256) expandKey(key [32]frontend.Variable, sbox0 [256]frontend.Variable, RCon [30]frontend.Variable) [240]frontend.Variable {
 
 	var expand [240]frontend.Variable
 	i := 0
 
-	for i < 16 {
+	for i < 32 {
 		expand[i] = key[i]
 		expand[i+1] = key[i+1]
 		expand[i+2] = key[i+2]
@@ -277,7 +277,7 @@ func (aes *AES256) expandKey(key [32]frontend.Variable, sbox0 [256]frontend.Vari
 		t2 := expand[i-2]
 		t3 := expand[i-1]
 
-		if i%16 == 0 {
+		if i%32 == 0 {
 			// t = subw(rotw(t)) ^ (uint32(powx[i/nb-1]) << 24)
 
 			// rotation
@@ -288,13 +288,18 @@ func (aes *AES256) expandKey(key [32]frontend.Variable, sbox0 [256]frontend.Vari
 			t1 = aes.subw(sbox0, t1)
 			t2 = aes.subw(sbox0, t2)
 			t3 = aes.subw(sbox0, t3)
-			t0 = aes.variableXor(t0, RCon[i/16], 8)
+			t0 = aes.variableXor(t0, RCon[i/32], 8)
+		} else if i%32 == 16 {
+			t0 = aes.subw(sbox0, t0)
+			t1 = aes.subw(sbox0, t1)
+			t2 = aes.subw(sbox0, t2)
+			t3 = aes.subw(sbox0, t3)
 		}
 
-		expand[i] = aes.variableXor(expand[i-16], t0, 8)
-		expand[i+1] = aes.variableXor(expand[i-16+1], t1, 8)
-		expand[i+2] = aes.variableXor(expand[i-16+2], t2, 8)
-		expand[i+3] = aes.variableXor(expand[i-16+3], t3, 8)
+		expand[i] = aes.variableXor(expand[i-32], t0, 8)
+		expand[i+1] = aes.variableXor(expand[i-32+1], t1, 8)
+		expand[i+2] = aes.variableXor(expand[i-32+2], t2, 8)
+		expand[i+3] = aes.variableXor(expand[i-32+3], t3, 8)
 
 		i += 4
 	}

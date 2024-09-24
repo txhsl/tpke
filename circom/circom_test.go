@@ -3,6 +3,8 @@ package circom
 import (
 	"fmt"
 	"github.com/consensys/gnark-crypto/ecc"
+	fr_bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr"
+	bls12381 "github.com/consensys/gnark-crypto/ecc/bls12-381"
 	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1"
 	"github.com/consensys/gnark-crypto/ecc/secp256k1/fp"
@@ -15,6 +17,7 @@ import (
 	"github.com/consensys/gnark/frontend/cs/r1cs"
 	"github.com/consensys/gnark/std/algebra/emulated/sw_emulated"
 	zksha3 "github.com/consensys/gnark/std/hash/sha3"
+	"github.com/consensys/gnark/std/math/bits"
 	"github.com/consensys/gnark/std/math/emulated"
 	"github.com/consensys/gnark/std/math/uints"
 	"github.com/consensys/gnark/test"
@@ -23,6 +26,8 @@ import (
 	"golang.org/x/crypto/sha3"
 	"math/big"
 	"math/rand"
+	"os"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -34,39 +39,109 @@ func doMPCSetUp(ccs constraint.ConstraintSystem) (pk groth16.ProvingKey, vk grot
 		power                = 20 //19 //2^9 元素个数
 	)
 
-	srs1 := mpcsetup.InitPhase1(power)
+	initPhase1 := mpcsetup.InitPhase1(power)
 
+	FilePhase1Init, err := os.Create("Phase1_1")
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+	}
+	_, err = initPhase1.WriteTo(FilePhase1Init)
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+	}
+	err = FilePhase1Init.Close()
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+	}
 	// Make and verify contributions for phase1
 	for i := 1; i < nContributionsPhase1; i++ {
 		// we clone test purposes; but in practice, participant will receive a []byte, deserialize it,
 		// add his contribution and send back to coordinator.
-		prev := Phase1clone(srs1)
 
-		srs1.Contribute()
-		err := mpcsetup.VerifyPhase1(&prev, &srs1)
+		//prev := Phase1clone(srs1)
+		FilePhase1Prev, err := os.Open("Phase1_" + strconv.Itoa(i))
+		var prev mpcsetup.Phase1
+		_, err = prev.ReadFrom(FilePhase1Prev)
 		if err != nil {
 			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
 		}
+		curr := Phase1clone(prev)
+		curr.Contribute()
+		err = mpcsetup.VerifyPhase1(&prev, &curr)
+		if err != nil {
+			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+		}
+		FilePhase1Next, err := os.Create("Phase1_" + strconv.Itoa(i+1))
+		if err != nil {
+			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+		}
+		_, err = curr.WriteTo(FilePhase1Next)
+		if err != nil {
+			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+		}
+	}
+
+	FilePhase1Final, err := os.Open("Phase1_" + strconv.Itoa(nContributionsPhase1))
+	var srs1 mpcsetup.Phase1
+	_, err = srs1.ReadFrom(FilePhase1Final)
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
 	}
 
 	// Prepare for phase-1.5
 	var evals mpcsetup.Phase2Evaluations
 	r1cs := ccs.(*cs.R1CS)
 	// Prepare for phase-2
-	srs2, evals := mpcsetup.InitPhase2(r1cs, &srs1)
+	//srs2, evals := mpcsetup.InitPhase2(r1cs, &srs1)
+	initPhase2, evals := mpcsetup.InitPhase2(r1cs, &srs1)
+
+	FilePhase2Init, err := os.Create("Phase2_1")
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+	}
+	_, err = initPhase2.WriteTo(FilePhase2Init)
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+	}
+	err = FilePhase2Init.Close()
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+	}
+
 	// Make and verify contributions for phase1
 	for i := 1; i < nContributionsPhase2; i++ {
 		// we clone for test purposes; but in practice, participant will receive a []byte, deserialize it,
 		// add his contribution and send back to coordinator.
-		prev := Phase2clone(srs2)
+		//prev := Phase2clone(srs2)
 
-		srs2.Contribute()
-		err := mpcsetup.VerifyPhase2(&prev, &srs2)
+		FilePhase2Prev, err := os.Open("Phase2_" + strconv.Itoa(i))
+		var prev mpcsetup.Phase2
+		_, err = prev.ReadFrom(FilePhase2Prev)
+		if err != nil {
+			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+		}
+		curr := Phase2clone(prev)
+		curr.Contribute()
+		err = mpcsetup.VerifyPhase2(&prev, &curr)
+		if err != nil {
+			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+		}
+		FilePhase2Next, err := os.Create("Phase2_" + strconv.Itoa(i+1))
+		if err != nil {
+			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+		}
+		_, err = curr.WriteTo(FilePhase2Next)
 		if err != nil {
 			return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
 		}
 	}
 
+	FilePhase2Final, err := os.Open("Phase2_" + strconv.Itoa(nContributionsPhase1))
+	var srs2 mpcsetup.Phase2
+	_, err = srs2.ReadFrom(FilePhase2Final)
+	if err != nil {
+		return groth16.ProvingKey{}, groth16.VerifyingKey{}, err
+	}
 	// Extract the proving and verifying keys
 	pk, vk = mpcsetup.ExtractKeys(&srs1, &srs2, &evals, ccs.GetNbConstraints())
 	return pk, vk, nil
@@ -97,19 +172,22 @@ func Phase2clone(phase2 mpcsetup.Phase2) mpcsetup.Phase2 {
 	return r
 }
 
-type MixEncryptionTest[T, S emulated.FieldParams] struct {
-	SmallR emulated.Element[S]
-	BigR   sw_emulated.AffinePoint[T] `gnark:",public"`
-	Pub    sw_emulated.AffinePoint[T] `gnark:",public"`
-	RPub   sw_emulated.AffinePoint[T]
+type MixEncryptionTest[T1, S1, T2, S2 emulated.FieldParams] struct {
+	SmallR emulated.Element[S1]
+	BigR   sw_emulated.AffinePoint[T1] `gnark:",public"`
+	Pub    sw_emulated.AffinePoint[T1] `gnark:",public"`
+	RPub   sw_emulated.AffinePoint[T1]
 
-	PlainChunks  []byte
+	PlainChunks  []uints.U8
 	Iv           [12]frontend.Variable `gnark:",public"`
 	ChunkIndex   frontend.Variable     `gnark:",public"`
-	CipherChunks []byte                `gnark:",public"`
+	CipherChunks []uints.U8            `gnark:",public"`
+
+	SmallFi emulated.Element[S2]
+	Fi      sw_emulated.AffinePoint[T2] `gnark:",public"`
 }
 
-func (c *MixEncryptionTest[T, S]) Define(api frontend.API) error {
+func (c *MixEncryptionTest[T1, S1, T2, S2]) Define(api frontend.API) error {
 	MBytes := make([]frontend.Variable, len(c.PlainChunks))
 	for i := 0; i < len(c.PlainChunks); i++ {
 		MBytes[i] = c.PlainChunks[i]
@@ -120,7 +198,7 @@ func (c *MixEncryptionTest[T, S]) Define(api frontend.API) error {
 		CiphertextBytes[i] = c.CipherChunks[i]
 	}
 
-	cr, err := sw_emulated.New[T, S](api, sw_emulated.GetCurveParams[T]())
+	cr, err := sw_emulated.New[T1, S1](api, sw_emulated.GetCurveParams[T1]())
 	if err != nil {
 		return err
 	}
@@ -157,12 +235,38 @@ func (c *MixEncryptionTest[T, S]) Define(api frontend.API) error {
 		key[j] = expected[j]
 	}
 	api.Println("key generate ok")
+	//check Fi=fiG
+	cr2, err := sw_emulated.New[T2, S2](api, sw_emulated.GetCurveParams[T2]())
+	if err != nil {
+		return err
+	}
+	cr2.AssertIsOnCurve(&c.Fi)
+	Fi := cr2.ScalarMulBase(&c.SmallFi)
+	cr2.AssertIsEqual(Fi, &c.Fi)
+	api.Println("Fi=fiG check ok")
 	//check aes process
 	aes := NewAES256(api)
 	gcm := NewGCM256(api, &aes)
 	gcm.Assert256(key, c.Iv, c.ChunkIndex, MBytes, CiphertextBytes)
 	api.Println("aes check ok")
 
+	//check smallFi==m
+	f, err := emulated.NewField[S2](api)
+	if err != nil {
+		return err
+	}
+	smallFiBits := f.ToBits(&c.SmallFi)
+	var plainBits []frontend.Variable
+	for i := range c.PlainChunks {
+		chunkBits := bits.ToBinary(api, c.PlainChunks[len(c.PlainChunks)-i-1].Val, bits.WithNbDigits(8))
+		plainBits = append(plainBits, chunkBits...)
+	}
+	if len(plainBits) != len(smallFiBits) {
+		return fmt.Errorf("mismatch length: %d != %d", len(plainBits), len(smallFiBits))
+	}
+	for i := range plainBits {
+		api.AssertIsEqual(plainBits[i], smallFiBits[i])
+	}
 	return nil
 }
 
@@ -204,17 +308,40 @@ func TestMixEncryption(t *testing.T) {
 		keyBytes[i] = expected[i]
 	}
 	//message
-	m := []byte{0x01, 0x02}
+	var fi fr_bls12381.Element
+	_, _ = fi.SetRandom()
+	SmallFi := new(big.Int)
+	fi.BigInt(SmallFi)
+
+	//m := SmallFi.Bytes()
+	var m [32]byte
+	SmallFi.FillBytes(m[:])
+	//m := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06}
+	//m := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x01}
 	//aes
-	ciphertext, nonce := AesGcmEncrypt(expected, m)
-	ChunkIndex := len(ciphertext)/16 + 1
+	ciphertext, nonce := AesGcmEncrypt(expected, m[:])
+	/*	var ChunkIndex int
+		if len(ciphertext)%16 == 0 {
+			ChunkIndex = len(ciphertext) / 16
+		} else {
+			ChunkIndex = len(ciphertext)/16 + 1
+		}*/
 	nonceBytes := [12]frontend.Variable{}
 	for i := 0; i < len(nonce); i++ {
 		nonceBytes[i] = nonce[i]
 	}
+	//Fi=fiG
+	_, _, g12381, _ := bls12381.Generators()
+	//var fi big.Int
+	var Fi bls12381.G1Affine
+	Fi.ScalarMultiplication(&g12381, SmallFi)
+	t.Logf("create Fi ok ")
 	//proof
-	circuit := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
-	witness := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+	circuit := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr, emulated.BLS12381Fp, emulated.BLS12381Fr]{
+		PlainChunks:  make([]uints.U8, len(m)),
+		CipherChunks: make([]uints.U8, len(ciphertext)),
+	}
+	witness := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr, emulated.BLS12381Fp, emulated.BLS12381Fr]{
 		SmallR: emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
 		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
 			X: emulated.ValueOf[emulated.Secp256k1Fp](BigR.X),
@@ -228,10 +355,16 @@ func TestMixEncryption(t *testing.T) {
 			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
 		},
-		PlainChunks:  m,
+		PlainChunks:  uints.NewU8Array(m[:]),
 		Iv:           nonceBytes,
-		ChunkIndex:   ChunkIndex,
-		CipherChunks: ciphertext,
+		ChunkIndex:   2,
+		CipherChunks: uints.NewU8Array(ciphertext),
+
+		SmallFi: emulated.ValueOf[emulated.BLS12381Fr](SmallFi),
+		Fi: sw_emulated.AffinePoint[emulated.BLS12381Fp]{
+			X: emulated.ValueOf[emulated.BLS12381Fp](Fi.X),
+			Y: emulated.ValueOf[emulated.BLS12381Fp](Fi.Y),
+		},
 	}
 	err = test.IsSolved(&circuit, &witness, ecc.BN254.ScalarField())
 	assert := test.NewAssert(t)
@@ -284,7 +417,7 @@ func TestMixEncryptionByMPC(t *testing.T) {
 		nonceBytes[i] = nonce[i]
 	}
 	//proof
-	circuit := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{}
+	circuit := MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr, emulated.BLS12381Fp, emulated.BLS12381Fr]{}
 	css, err := frontend.Compile(ecc.BN254.ScalarField(), r1cs.NewBuilder, &circuit)
 	if err != nil {
 		t.Fatalf(err.Error())
@@ -296,7 +429,7 @@ func TestMixEncryptionByMPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
-	assignment := &MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr]{
+	assignment := &MixEncryptionTest[emulated.Secp256k1Fp, emulated.Secp256k1Fr, emulated.BLS12381Fp, emulated.BLS12381Fr]{
 		SmallR: emulated.ValueOf[emulated.Secp256k1Fr](SmallR),
 		BigR: sw_emulated.AffinePoint[emulated.Secp256k1Fp]{
 			X: emulated.ValueOf[emulated.Secp256k1Fp](BigR.X),
@@ -310,10 +443,10 @@ func TestMixEncryptionByMPC(t *testing.T) {
 			X: emulated.ValueOf[emulated.Secp256k1Fp](RPub.X),
 			Y: emulated.ValueOf[emulated.Secp256k1Fp](RPub.Y),
 		},
-		PlainChunks:  m,
+		PlainChunks:  uints.NewU8Array(m),
 		Iv:           nonceBytes,
 		ChunkIndex:   ChunkIndex,
-		CipherChunks: ciphertext,
+		CipherChunks: uints.NewU8Array(ciphertext),
 	}
 	//计算witness
 	witness, err := frontend.NewWitness(assignment, ecc.BN254.ScalarField())
